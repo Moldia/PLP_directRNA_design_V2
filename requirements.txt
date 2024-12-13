@@ -1,0 +1,6 @@
+pandas
+biopython
+numpy
+logomaker
+matplotlib
+matplotlib-venn
