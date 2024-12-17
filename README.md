@@ -38,3 +38,16 @@ After entering the container's shell, start the Jupyter Notebook with the follow
 ```
 jupyter notebook --ip=0.0.0.0 --port=2222 --no-browser --allow-root
 ```
+
+# Copying data to Docker Container
+You should mount the data and relevant files (e.g. jupyter notebooks)
+```
+docker run -it -p 2222:2222 \
+  -v /home/nima/Lee_2023/nima_dataset/:/app \
+  -v /home/nima/PLP_directRNA_design_V2/codes/Benchmarking.ipynb:/app/Benchmarking.ipynb  \
+  plp_probe_design_v2
+```
+Any changes you make to the mounted files or directories inside the container will be reflected in the original files on your host system. 
+
+Then in your browser open this address:
+`http://localhost:2222` 
