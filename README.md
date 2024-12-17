@@ -18,12 +18,13 @@ Build the Docker image using the docker build command. Replace <image-name> with
 ```
 docker build -t plp_probe_design_v2 .
 ```
-## Step 4: Run the Docker Container
+# Running the docker image   
+## Step 1: Run the Docker Container
 After successfully building the image, create and run a container using the following command:
 ```
 docker run -it --rm -p 2222:2222 plp_probe_design_v2
 ```
-## Step 5: Checking installation of required tools (`blat` & `cutadapt`)
+## Step 2: Checking installation of required tools (`blat` & `cutadapt`)
 You can test whether `blat` is installed just running the tool without any parameters which print the help:  
 ```
 blat 
@@ -32,7 +33,7 @@ You can test whether `cutadapt` is installed:
 ```
 cutadapt --version
 ```
-## Step 6: Start Jupyter Notebook from Within the Container
+## Step 3: Start Jupyter Notebook from Within the Container
 After entering the container's shell, start the Jupyter Notebook with the following command:
 ```
 jupyter notebook --ip=0.0.0.0 --port=2222 --no-browser --allow-root
