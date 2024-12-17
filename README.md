@@ -39,7 +39,7 @@ After entering the container's shell, start the Jupyter Notebook with the follow
 jupyter notebook --ip=0.0.0.0 --port=2222 --no-browser --allow-root
 ```
 
-# Copying data to Docker Container
+# Mounting data to Docker Container
 You should mount the data and relevant files (e.g. jupyter notebooks)
 ```
 docker run -it -p 2222:2222 \
