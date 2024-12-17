@@ -18,12 +18,13 @@ Build the Docker image using the docker build command. Replace <image-name> with
 ```
 docker build -t plp_probe_design_v2 .
 ```
-## Step 4: Run the Docker Container
+# Running the docker image   
+## Step 1: Run the Docker Container
 After successfully building the image, create and run a container using the following command:
 ```
 docker run -it --rm -p 2222:2222 plp_probe_design_v2
 ```
-## Step 5: Checking installation of required tools (`blat` & `cutadapt`)
+## Step 2: Checking installation of required tools (`blat` & `cutadapt`)
 You can test whether `blat` is installed just running the tool without any parameters which print the help:  
 ```
 blat 
@@ -32,8 +33,21 @@ You can test whether `cutadapt` is installed:
 ```
 cutadapt --version
 ```
-## Step 6: Start Jupyter Notebook from Within the Container
+## Step 3: Start Jupyter Notebook from Within the Container
 After entering the container's shell, start the Jupyter Notebook with the following command:
 ```
 jupyter notebook --ip=0.0.0.0 --port=2222 --no-browser --allow-root
 ```
+
+# Copying data to Docker Container
+You should mount the data and relevant files (e.g. jupyter notebooks)
+```
+docker run -it -p 2222:2222 \
+  -v /home/nima/Lee_2023/nima_dataset/:/app \
+  -v /home/nima/PLP_directRNA_design_V2/codes/Benchmarking.ipynb:/app/Benchmarking.ipynb  \
+  plp_probe_design_v2
+```
+Any changes you make to the mounted files or directories inside the container will be reflected in the original files on your host system. 
+
+Then in your browser open this address:
+`http://localhost:2222` 
