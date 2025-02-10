@@ -3,49 +3,22 @@ FROM ubuntu:20.04
 
 # Set environment variables to prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
-ENV MACHTYPE=x86_64
-ENV PATH=/usr/local/bin:$PATH
 
-# Update and install system dependencies, including required libraries for BLAT
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     make \
     gcc \
-    git \
-    libssl-dev \
-    libpng-dev \
-    uuid-dev \
-    libmysqlclient-dev \
     python3 \
     python3-pip \
-    cutadapt \
+    python3-cutadapt \
     && apt-get clean
 
 # Install Python dependencies
 WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
-
-# Clone and build UCSC Kent tools (BLAT and related utilities)
-WORKDIR /usr/local/src/kent
-RUN git clone git://genome-source.soe.ucsc.edu/kent.git . \
-    && git checkout -t -b beta origin/beta \
-    && git pull \
-    && cd src \
-    && make utils \
-    && cd gfServer/ \
-    && make \
-    && cd ../gfClient/ \
-    && make \
-    && cd ../blat/ \
-    && make \
-    && cd ../utils/faToNib/ \
-    && make
-
-# Move BLAT executables to /usr/local/bin to make them globally executable
-RUN mkdir -p /usr/local/bin \
-    && cp ~/bin/$MACHTYPE/* /usr/local/bin/
 
 # Install bedtools
 RUN apt-get update && apt-get install -y \
@@ -58,8 +31,8 @@ RUN apt-get update && apt-get install -y \
 # Add local Python package (PLP_directRNA_design)
 COPY PLP_directRNA_design /app/PLP_directRNA_design
 
-# Expose port 2222 for this container
-EXPOSE 2222
+# Expose the port for Jupyter Notebook
+EXPOSE 8888
 
 # Install Jupyter Notebook
 RUN pip3 install notebook
@@ -67,6 +40,6 @@ RUN pip3 install notebook
 # Set the working directory
 WORKDIR /app
 
-# Start Jupyter Notebook by default
+# Start a shell for manual debugging
 CMD ["bash"]
-#CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=2222", "--no-browser", "--allow-root"]
+
