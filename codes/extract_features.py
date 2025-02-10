@@ -110,15 +110,15 @@ def merge_regions_and_coverage(genes_of_interest, gtf_df):
         
         for _, row in isoforms.iterrows():
             if not merged:
-                merged.append(row.to_dict())  # First entry, add as-is
+                merged.append(row.to_dict())  
             else:
                 prev = merged[-1]
 
-                if row['start'] <= prev['end']:  # Overlapping region
-                    merged[-1]['end'] = max(prev['end'], row['end'])  # Expand region
-                    merged[-1]['transcript_id'] += ";" + row['transcript_id']  # Append transcript_id
+                if row['start'] <= prev['end']:  
+                    merged[-1]['end'] = max(prev['end'], row['end'])  
+                    merged[-1]['transcript_id'] += ";" + row['transcript_id']  
                 else:
-                    merged.append(row.to_dict())  # Start new region
+                    merged.append(row.to_dict())  
 
             # Update coverage using NumPy slicing (avoids looping over each position)
             coverage_array[row['start'] - min_start : row['end'] - min_start + 1] += 1
@@ -141,8 +141,11 @@ def merge_regions_and_coverage(genes_of_interest, gtf_df):
     # Concatenate all gene-specific DataFrames into a final result
     final_df = pd.concat(merged_regions, ignore_index=True)
 
+    # Add region_id column for easier downstream analysis
+    final_df['region'] = final_df['seqname'].astype(str) + ":" + final_df['start'].astype(str) + "-" + final_df['end'].astype(str)
+    
     # Keep only relevant columns
-    final_df = final_df[['seqname', 'start', 'end', 'strand', 'gene_name', 'transcript_id', 'coverage']]
+    final_df = final_df[['seqname', 'start', 'end', 'strand', 'gene_name', 'transcript_id', 'coverage', 'region']]
 
     # Display the DataFrame with coverage
     return(final_df)
@@ -185,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument("--gtf", required=True, help="Path to the GTF file")
     parser.add_argument("--output", required=True, help="Path to the output file")
     parser.add_argument("--genes", default=None, help="Comma-separated list of gene IDs or names to filter")
-    parser.add_argument("--identifier_type", default='gene_id', help="Type of identifier provided ('gene_id' or 'gene_name')")
+    parser.add_argument("--identifier_type", default='gene_id', choices=['gene_id', 'gene_name'], help="Type of identifier provided ('gene_id' or 'gene_name')")
     parser.add_argument("--gene_feature", default='CDS', help="Feature type to extract (default = 'CDS')")
     args = parser.parse_args()
     main(args.gtf, args.output, args.genes, args.identifier_type, args.gene_feature)
