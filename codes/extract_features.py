@@ -162,6 +162,7 @@ def main(gtf_file, output_file, genes_str=None, identifier_type='gene_id', gene_
         genes_str (str): Comma-separated string of gene IDs or names to filter.
         identifier_type (str): Type of identifier provided ('gene_id' or 'gene_name').
         gene_feature (str): Feature type to extract (default = 'CDS').
+    
     """
     # Convert the comma-separated string into a set of gene IDs or names (if provided)
     if genes_str:
