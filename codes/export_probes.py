@@ -11,7 +11,7 @@ import random
 import numpy as np
 import argparse
 
-def find_target(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10):
+def export_probes(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10):
     """
     Function to extract probe sequences fulfilling the following criteria:
     Adapted from sequence developed by Sergio 
@@ -146,7 +146,7 @@ def main(selected_features, fasta_file, output_file, plp_length, min_coverage, g
     print(f"🔹 Loading selected features from {selected_features}...")
 #    selected_features = pd.read_csv(selected_features, sep='\t')
 
-    find_target(selected_features, fasta_file, plp_length, min_coverage, output_file, gc_min, gc_max, num_probes)
+    export_probes(selected_features, fasta_file, plp_length, min_coverage, output_file, gc_min, gc_max, num_probes)
 
 
 if __name__ == "__main__":
