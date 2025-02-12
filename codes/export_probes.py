@@ -27,7 +27,7 @@ def export_probes(selected_features, fasta_file, plp_length, min_coverage, outpu
         DataFrame: DataFrame with extracted probe sequences.
     """
     # Create a dataframe to store the targets
-    targets = pd.DataFrame(columns=['Gene', 'Region', 'Sequence', 'GC', 'Ligation junction', 'Coverage'])
+    targets = pd.DataFrame(columns=['Probe_id', 'Gene', 'Region', 'Sequence', 'GC', 'Ligation junction', 'Coverage'])
 
     # check if size of the probe is an even number
     if plp_length % 2 != 0:
@@ -104,6 +104,7 @@ def export_probes(selected_features, fasta_file, plp_length, min_coverage, outpu
 
             # save the target to the dataframe
             targets.append({
+                "Probe_id": f"{gene}|{start}-{end}",
                 "Gene": gene,
                 "Region": f"{chr_name}:{start}-{end}",
                 "Sequence": str(tmp_seq),
@@ -114,8 +115,21 @@ def export_probes(selected_features, fasta_file, plp_length, min_coverage, outpu
     targets_df = pd.DataFrame(targets)
     targets_df = select_top_probes(targets_df, num_probes)
     targets_df.to_csv(output_file, sep='\t', index=False)
-    print(f"✅ Final sequences saved to {output_file}.")
+    create_fasta(targets_df, output_file)
+    print(f"✅ Final sequences saved to {output_file} and fasta file {output_file}.fa .")
 
+def create_fasta(targets_df, output_file):
+    """
+    Create a FASTA file from the DataFrame with probe sequences.
+
+    Args:
+        targets_df (DataFrame): DataFrame with probe sequences.
+        output_file (str): Path to the output file.
+    """
+    output_file = output_file + ".fa"
+    with open(output_file, "w") as f:
+        for _,row in targets_df.iterrows():
+            f.write(f">{row['Probe_id']}\n{row['Sequence']}\n")
 
 def select_top_probes(df, num_probes):
     """
