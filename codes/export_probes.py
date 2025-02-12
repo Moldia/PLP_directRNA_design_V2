@@ -69,7 +69,7 @@ def export_probes(selected_features, fasta_file, plp_length, min_coverage, outpu
 
         # Extract chromosome and start position from region
         chr_name, start_end = region.split(":")
-        initial_start = int(start_end[1].split("-")[0])
+        initial_start = int(start_end.split("-")[0])
 
         # Extract the sequence
         seq = seq_dict[keys].seq
@@ -176,7 +176,7 @@ parser = argparse.ArgumentParser(
 #parser.parse_args(["--help"])  # Simulate --help call for testing
 
 parser.add_argument("--selected_features", required=True, help="Path to the selected features file (TSV format)")
-parser.add_argument("--fasta_file", required=True, help="Path to the indexed FASTA file")
+parser.add_argument("--fasta_file", required=True, help="Path to the extracted sequences file (CDS/exons)")
 parser.add_argument("--output_file", required=True, help="Path to the output file")
 parser.add_argument("--plp_length", default=30, type=int, help="Minimum probe length")
 parser.add_argument("--min_coverage", default=1, type=int, help="Minimum coverage of the region")
