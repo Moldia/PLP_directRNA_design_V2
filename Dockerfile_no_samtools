@@ -28,26 +28,6 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y bedtools \
     && apt-get clean
 
-## Install samtools dependencies
-RUN apt-get update && apt-get install -y \
-    autoconf \
-    && apt-get clean
-
-RUN apt-get update && apt-get install -y \
-    automake perl zlib1g-dev libbz2-dev liblzma-dev libcurl4-gnutls-dev libssl-dev libncurses5-dev libdeflate-dev \
-    && apt-get clean
-
-## Install samtools
-RUN wget https://github.com/samtools/samtools/releases/download/1.21/samtools-1.21.tar.bz2 \
-    && tar -xjf samtools-1.21.tar.bz2 \
-    && rm samtools-1.21.tar.bz2 \
-    && cd samtools-1.21 \
-    && autoheader \
-    && autoconf -Wno-syntax \ 
-    && ./configure \
-    && make \
-    && make install
-
 # Add local Python package (PLP_directRNA_design)
 COPY PLP_directRNA_design /app/PLP_directRNA_design
 
@@ -57,11 +37,9 @@ EXPOSE 8888
 # Install Jupyter Notebook
 RUN pip3 install notebook
 
-## Set perl locale settings
-ENV LC_ALL=C
-
 # Set the working directory
 WORKDIR /app
 
 # Start a shell for manual debugging
 CMD ["bash"]
+

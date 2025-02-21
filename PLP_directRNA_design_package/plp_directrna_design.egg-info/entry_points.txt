@@ -1,0 +1,2 @@
+[console_scripts]
+extract_features = PLP_directRNA_design.extract_features:main
