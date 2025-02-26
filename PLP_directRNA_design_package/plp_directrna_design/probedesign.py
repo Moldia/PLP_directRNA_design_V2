@@ -11,6 +11,9 @@ import random
 import numpy as np
 import argparse
 import re
+import os 
+import multiprocessing
+import subprocess
 
 # Extract features functions:
 
@@ -68,7 +71,7 @@ def parse_gtf_to_dataframe(gtf_path: str) -> pd.DataFrame:
 
     # Drop the original attribute column
     df.drop(columns=['attribute'], inplace=True)
-
+    
     return df
 
 # Extract features functions:
@@ -99,6 +102,7 @@ def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id', gene_feature=
         raise InputValueError("No gene list provided. Processing all genes. $genes_of_interest", field="genes_of_interest", code="no_gene_list_provided")
 
     # Check if a gene list is provided and filter accordingly
+    
     if genes_of_interest:
         if identifier_type == 'gene_id':
             gtf_df = gtf_df[gtf_df['gene_id'].str.lower().isin(genes_of_interest) & (gtf_df['feature'] == gene_feature)]
@@ -107,6 +111,7 @@ def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id', gene_feature=
         else:
             raise InputValueError("Gene identifier type must be 'gene_id' or 'gene_name'", field="identifier_type", code="no_identifier_type_provided")
             
+
     if len(gtf_df) == 0:
         raise InputValueError("No matching genes found in the GTF file. This can be due to either incomplete gtf file or errors in gene identifications.", field="genes_of_interest", code="no_matching_genes_found")
 
@@ -188,10 +193,118 @@ def merge_regions_and_coverage(genes_of_interest, gtf_df):
     # Display the DataFrame with coverage
     return(final_df)
 
-# Export probes functions:
-def export_probes(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10):
+# Extract sequences functions:
+def save_regions_for_faidx(df, output_file, plp_length=30, identifier_type = 'gene_name'):
     """
-    Function to extract probe sequences fulfilling the following criteria:
+    Saves genomic regions in a format compatible with `samtools faidx`.
+
+    Args:
+        df (pd.DataFrame): DataFrame with 'seqname', 'start', 'end' columns.
+        output_file (str): Path to save the region file.
+    """
+    print(f"Saving regions to {output_file} for `samtools faidx`...")
+
+    # Setting the datatype
+    df['seqname'] = df['seqname'].astype(str)
+    df['start'] = df['start'].astype(int)  
+    df['end'] = df['end'].astype(int) 
+    plp_length = int(plp_length)
+
+
+    # Filter regions based on length
+    df = df[(df['end'] - df['start']) >= (plp_length + plp_length / 2)]
+    
+    # Export regions in the format expected by `samtools faidx`
+    df[['region']].to_csv(output_file + ".txt", sep = '\t', header=False, index=False)
+
+def check_fasta_index(fasta_file):
+    """
+    Checks if a FASTA index file (.fai) exists.
+
+    Args:
+        fasta_file (str): Path to the FASTA file.
+
+    Returns:
+        str: Path to the valid FASTA index file.
+    """
+    fai_file_1 = fasta_file + ".fai"  # Example: reference.fa.fai
+    fai_file_2 = os.path.splitext(fasta_file)[0] + ".fai"  # Example: reference.fai
+
+    if os.path.exists(fai_file_1):
+        return fai_file_1
+    elif os.path.exists(fai_file_2):
+        return fai_file_2
+    else:
+        print(f"⚠️ FASTA index file not found for {fasta_file}!")
+        print("Creating the index now... This may take a while for large genomes.")
+        subprocess.run(["samtools", "faidx", fasta_file])
+        return fasta_file + ".fai"  # Assume samtools follows the convention
+
+
+def extract_sequences(fasta_file, regions_file, output_fasta, gtf_df):
+    """
+    Extracts CDS sequences using `samtools faidx`, adjusts for strand orientation, 
+    and includes gene identifiers in the FASTA headers.
+
+    Args:
+        fasta_file (str): Path to the indexed FASTA file.
+        regions_file (str): File with genomic regions (one per line).
+        output_fasta (str): Path to save the extracted sequences.
+        gtf_df (pd.DataFrame): DataFrame containing 'seqname', 'start', 'end', 'strand', 'gene_name' for strand correction.
+    """
+    print(f"Extracting sequences from {fasta_file} using `samtools faidx`...")
+
+    # Get number of CPUs for multi-threading
+    num_cpus = multiprocessing.cpu_count()
+
+    # Temporary output file before strand correction
+    temp_fasta = "temp_extracted.fa"
+
+    # Run samtools faidx to extract sequences
+    command = [
+        "samtools", "faidx", "-@", str(num_cpus), 
+        "-r", regions_file, 
+        "-o", temp_fasta, 
+        fasta_file
+    ]
+    subprocess.run(command, check=True)
+
+    print("✅ Sequences extracted. Now adjusting for strand orientation and updating headers...")
+
+    # Load region-to-gene mapping from gtf_df
+    feature_dict = dict(zip(
+        gtf_df['region'],
+        zip(gtf_df['gene_name'], gtf_df['strand'])  
+    ))
+
+    # Read extracted sequences and apply strand correction
+    updated_sequences = []
+    seq_dict = SeqIO.to_dict(SeqIO.parse(temp_fasta, "fasta"))  
+
+    for region, record in seq_dict.items():
+        gene_name, strand = feature_dict.get(region, ("UNKNOWN", "+"))  
+        sequence = record.seq
+
+        # Reverse-complement if the gene is on the negative strand
+        if strand == "-":
+            sequence = sequence.reverse_complement()
+
+        # Update header: >gene_name|region
+        record.id = f"{gene_name}|{region}"
+        record.description = ""  # Remove extra description
+        record.seq = sequence
+        updated_sequences.append(record)
+
+    # Write the updated FASTA
+    SeqIO.write(updated_sequences, output_fasta, "fasta")
+
+    print(f"✅ Final sequences saved to {output_fasta}, with correct strand orientation and gene names.")
+
+
+# Find target functions:
+def find_targets(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10):
+    """
+    Function to extract target sequences fulfilling the following criteria:
     Adapted from sequence developed by Sergio 
     Args:
         selected_features (str): Path to the selected features file (TSV format).
@@ -331,11 +444,3 @@ def select_top_probes(df, num_probes):
     
     return final_df
 
-def main(selected_features, fasta_file, output_file, plp_length, min_coverage, gc_min=50, gc_max=65, num_probes=10):
-    """
-    Main function for probe extraction.
-    """
-    print(f"🔹 Loading selected features from {selected_features}...")
-#    selected_features = pd.read_csv(selected_features, sep='\t')
-
-    export_probes(selected_features, fasta_file, plp_length, min_coverage, output_file, gc_min, gc_max, num_probes)
