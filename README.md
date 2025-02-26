@@ -50,3 +50,7 @@ docker run -it -p 2222:2222 \
   plp_probe_design_v2
 ```
 Any changes you make to the mounted files or directories inside the container will be reflected in the original files on your host system. 
+
+# Running  
+## extract features
+`python codes/extract_features.py --gtf data/tmp.gtf --genes Grik2 --identifier_type gene_name --gene_feature CDS --output extract_features_output.txt`
