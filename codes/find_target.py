@@ -1,28 +1,38 @@
 
+from plp_directrna_design import probedesign as plp
+import pandas as pd
+import argparse
 
 if __name__ == "__main__":
-    import argparse
-
-parser = argparse.ArgumentParser(
-    description=(
-        "Extracts probe sequences fulfilling the following criteria:\n"
-        "\n"
-        "- GC content between 50-65% (default).\n"
-        "- Ligation junctions must be 'preferred' or 'neutral' (not 'non-preferred').\n"
-        "  See Xenium Custom Panel Design guide:\n"
-        "  https://cdn.10xgenomics.com/image/upload/v1716400584/support-documents/CG000683_TechNote_Xenium_Custom_Panel_Design_RevD.pdf\n"
-        "\n"
-        "  Ligation junction preferences:\n"
-        "    Preferred:      AT, TA, GA, AG\n"
-        "    Neutral:        TT, CT, CA, TC, AC, CC, TG, AA\n"
-        "    Non-Preferred:  CG, GT, GG, GC (filtered out)\n"
-        "\n"
-        "- No homopolymers of length 3 or more (e.g., AAA, TTT, GGG, CCC).\n"
-        "- Minimum coverage of the region is met (default: 1, based on CDS/exon overlap).\n"
-        "- The probe size must be an even number (default: 30)."
-        ),
-        formatter_class=argparse.RawTextHelpFormatter  # Ensures multiline formatting
+    parser = argparse.ArgumentParser(
+        description=(
+            "Extracts probe sequences fulfilling the following criteria:\n"
+            "\n"
+            "- GC content between 50-65% (default).\n"
+            "- Ligation junctions must be 'preferred' or 'neutral' (not 'non-preferred').\n"
+            "  See Xenium Custom Panel Design guide:\n"
+            "  https://cdn.10xgenomics.com/image/upload/v1716400584/support-documents/CG000683_TechNote_Xenium_Custom_Panel_Design_RevD.pdf\n"
+            "\n"
+            "  Ligation junction preferences:\n"
+            "    Preferred:      AT, TA, GA, AG\n"
+            "    Neutral:        TT, CT, CA, TC, AC, CC, TG, AA\n"
+            "    Non-Preferred:  CG, GT, GG, GC (filtered out)\n"
+            "\n"
+            "- No homopolymers of length 3 or more (e.g., AAA, TTT, GGG, CCC).\n"
+            "- Minimum coverage of the region is met (default: 1, based on CDS/exon overlap).\n"
+            "- The probe size must be an even number (default: 30)."
+            ),
+            formatter_class=argparse.RawTextHelpFormatter  # Ensures multiline formatting
     )
+
+def main(selected_features, fasta_file, output_file, plp_length, min_coverage, gc_min=50, gc_max=65, num_probes=10):
+    """
+    Main function for probe extraction.
+    """
+    print(f"🔹 Loading selected features from {selected_features}...")
+#    selected_features = pd.read_csv(selected_features, sep='\t')
+
+    plp.find_targets(selected_features, fasta_file, plp_length, min_coverage, output_file, gc_min, gc_max, num_probes)
 
 #parser.parse_args(["--help"])  # Simulate --help call for testing
 
