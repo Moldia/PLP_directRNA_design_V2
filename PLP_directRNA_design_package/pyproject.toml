@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plp_directrna_design"
+version = "1.0.0"
+description = "A package for designing probes for direct RNA sequencing."
+authors = [
+    { name = "Nima Rafati" },
+    { name = "Marco Grillo" },
+    { name = "Victoria Muiliadi" },
+    { name = "Maria Escriva Conde" },
+    { name = "Sergio Marco Salas" }
+]
+dependencies = [
+    "pandas",
+    "numpy",
+    "biopython"
+]
+
+[project.scripts]
+extract_features = "PLP_directRNA_design.extract_features:main"
