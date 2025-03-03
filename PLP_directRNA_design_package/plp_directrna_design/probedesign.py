@@ -14,10 +14,148 @@ import re
 import os 
 import multiprocessing
 import subprocess
+import itertools
 
-# Extract features functions:
+
+# Dictionaries
+
+## IUPAC dictionary
+IUPAC_CODES = {
+    "R": ["A", "G"],
+    "Y": ["C", "T"],
+    "S": ["G", "C"],
+    "W": ["A", "T"],
+    "K": ["G", "T"],
+    "M": ["A", "C"],
+    "B": ["C", "G", "T"],
+    "D": ["A", "G", "T"],
+    "H": ["A", "C", "T"],
+    "V": ["A", "C", "G"],
+    "N": ["A", "C", "G", "T"],  
+    "A": ["A"],
+    "C": ["C"],
+    "G": ["G"],
+    "T": ["T"]
+}
+
+## Ligation junction dictionary
+ligation_junctions_dict = {'TA': 'preferred',
+                        'TA': 'preferred',
+                        'GA': 'preferred',
+                        'AG': 'preferred',
+                        'TT': 'neutral',
+                        'CT': 'neutral',
+                        'CA': 'neutral',
+                        'TC': 'neutral',
+                        'AC': 'neutral',
+                        'CC': 'neutral',
+                        'TG': 'neutral',
+                        'AA': 'neutral', 
+                        'CG': 'non-preferred', 
+                        'GT': 'non-preferred',
+                        'GG': 'non-preferred',
+                        'GC': 'non-preferred'}
 
 
+# Functions
+
+## Evaluate IUPAC mismatches format:
+def parse_iupac_mismatches(mismatch_str):
+    """
+    Parses a string of mismatches formatted as "pos:base,pos:base" into a list of tuples.
+    
+    Args:
+        mismatch_str (str): Mismatch input string (e.g., "5:R,10:G")
+    
+    Returns:
+        list: A list of (position, base) tuples, e.g., [(5, 'R'), (10, 'G')].
+    """
+    mismatches = []
+    try:
+        for pair in mismatch_str.split(","):
+            pos, base = pair.split(":")
+            pos = int(pos.strip())  # Convert position to integer
+            base = base.strip().upper()  # Ensure base is uppercase
+            mismatches.append((pos, base))
+
+    except (ValueError, IndexError):
+        raise InputValueError("Invalid format for --iupac_mismatches. Use 'pos:base,pos:base', e.g., '5:R,10:G'.", 
+                              field="iupac_mismatches", code="invalid_mismatch_format")
+    
+    return mismatches
+## Evaluate ligation junction functions:
+def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30, num_probes=10):
+    """
+    Evaluates the ligation junction of a probe and introduces mismatches if needed.
+
+    Args:
+        probe_seq (str): The probe sequence.
+        iupac_mismatches (list of tuples): List of positions and IUPAC codes or bases to introduce mismatches. Note that the number of mismatches should be less than or equal to 2.
+                                            Example: 5:R,10:G
+        plp_length (int): Probe length (default: 30).
+
+    Returns:
+        tuple: (updated probe sequence, ligation junction category)
+    """
+    # Add Ligation junction column to the DataFrame
+    if 'Ligation junction' not in targets.columns:
+        targets['Ligation junction'] = 'non-preferred'
+
+
+    # Extract the ligation junction (2 bases around the center of the probe)
+    junction_position = int((plp_length / 2) - 1)
+    new_rows = []
+    for idx in targets.index:
+
+        probe_seq = targets.loc[idx]['Sequence']
+        ligation_junction = probe_seq[junction_position] + probe_seq[junction_position + 2]
+
+        # Determine the ligation status
+        ligation_status = ligation_junctions_dict.get(ligation_junction, "non-preferred")
+        targets.loc[idx, 'Ligation junction'] = ligation_status
+
+        # Apply IUPAC mismatches if provided
+        if iupac_mismatches is not None:
+            if isinstance(iupac_mismatches, str):  # Only parse if it's a string
+                iupac_mismatches = parse_iupac_mismatches(iupac_mismatches)
+
+            num_mismatches = len(iupac_mismatches)
+#s            print("Num mismatch:", num_mismatches)
+            if num_mismatches <= 2: # Limit to 2 mismatches
+                for r in range(1, num_mismatches + 1): 
+                    for subset in itertools.combinations(range(num_mismatches), r): # Generate all possible combinations of mismatches
+                        selected_mismatches = [iupac_mismatches[i] for i in subset]
+                        replacement_options = [IUPAC_CODES[symbol] for pos, symbol in selected_mismatches]
+#                        print('Replacement options:', replacement_options)
+
+                        # Generate all possible combinations of replacements
+                        for replacement in itertools.product(*replacement_options):
+                            new_probe_seq = list(probe_seq)
+                            new_id_suffix = []
+                            for (pos, iupac_symbol), new_base in zip(selected_mismatches, replacement):
+                                new_probe_seq[pos] = new_base
+                                new_id_suffix.append(f"{pos}_{iupac_symbol}_{new_base}")
+                            new_probe_seq = "".join(new_probe_seq)
+                            new_probe_id = f"{targets.loc[idx, 'Probe_id']}|{'_'.join(new_id_suffix)}"
+                            # Revaluate the ligation junction
+                            new_ligation_junction = new_probe_seq[junction_position] + new_probe_seq[junction_position + 2]
+                            new_ligation_status = ligation_junctions_dict.get(new_ligation_junction, "non-preferred")
+                            new_row = targets.loc[idx].copy()
+                            new_row['Sequence'] = new_probe_seq
+                            new_row['Ligation junction'] = new_ligation_status
+                            new_row['Probe_id'] = new_probe_id
+                            new_rows.append((new_probe_id, new_row))
+            else:
+                raise InputValueError("The number of mismatches should be less than or equal to 2", field="iupac_mismatches", code="mismatches_exceed_limit")
+   
+    # Append the new rows to the DataFrame
+    new_rows_df = pd.DataFrame([row[1] for row in new_rows], index=[row[0] for row in new_rows])
+    targets = pd.concat([targets, new_rows_df])
+    return targets
+
+
+
+## Custom exception classes:
 class InputValueError(ValueError):
     """
     Custom exception class for invalid
@@ -29,7 +167,7 @@ class InputValueError(ValueError):
         self.code = code
 
 
-
+## Extract features functions:
 
 def parse_gtf_to_dataframe(gtf_path: str) -> pd.DataFrame:
     """
@@ -73,8 +211,6 @@ def parse_gtf_to_dataframe(gtf_path: str) -> pd.DataFrame:
     df.drop(columns=['attribute'], inplace=True)
     
     return df
-
-# Extract features functions:
 
 def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id', gene_feature='CDS'):
     """
@@ -193,7 +329,7 @@ def merge_regions_and_coverage(genes_of_interest, gtf_df):
     # Display the DataFrame with coverage
     return(final_df)
 
-# Extract sequences functions:
+## Extract sequences functions:
 def save_regions_for_faidx(df, output_file, plp_length=30, identifier_type = 'gene_name'):
     """
     Saves genomic regions in a format compatible with `samtools faidx`.
@@ -301,8 +437,8 @@ def extract_sequences(fasta_file, regions_file, output_fasta, gtf_df):
     print(f"✅ Final sequences saved to {output_fasta}, with correct strand orientation and gene names.")
 
 
-# Find target functions:
-def find_targets(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10):
+## Find target functions:
+def find_targets(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10, iupac_mismatches=None):
     """
     Function to extract target sequences fulfilling the following criteria:
     Adapted from sequence developed by Sergio 
@@ -314,41 +450,30 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
         min_coverage (int): Minimum coverage of the region.
         gc_min (int): Minimum GC content (default: 50).
         gc_max (int): Maximum GC content (default: 65).
+        num_probes (int): Number of probes to select per gene (default: 10).
+        iupac_mismatches (list of tuples): List of positions and IUPAC codes to introduce mismatches. Note that the number of mismatches should be less than or equal to 2.
+                                            Example: 5:R,10:G
     Returns:
         DataFrame: DataFrame with extracted probe sequences.
     """
     # Create a dataframe to store the targets
-    targets = pd.DataFrame(columns=['Probe_id', 'Gene', 'Region', 'Sequence', 'GC', 'Ligation junction', 'Coverage'])
+    targets = pd.DataFrame(columns=['Probe_id', 'Gene', 'Region', 'Sequence', 'GC', 'Coverage'])
+
 
     # check if size of the probe is an even number
     if plp_length % 2 != 0:
         raise InputValueError("The size of the probe should be an even number", field="plp_length", code="odd_value_for_plp_length_provided")
     
-    # Ligation junction dictionary
-    ligation_junctions_dict = {'TA': 'preferred',
-                          'TA': 'preferred',
-                          'GA': 'preferred',
-                          'AG': 'preferred',
-                          'TT': 'neutral',
-                          'CT': 'neutral',
-                          'CA': 'neutral',
-                          'TC': 'neutral',
-                          'AC': 'neutral',
-                          'CC': 'neutral',
-                          'TG': 'neutral',
-                          'AA': 'neutral', 
-                          'CG': 'non-preferred', 
-                          'GT': 'non-preferred',
-                          'GG': 'non-preferred',
-                          'GC': 'non-preferred'}
-    
+        
     # load the fasta file
     seq_dict = SeqIO.to_dict(SeqIO.parse(fasta_file, "fasta"))  
 
     # load the selected features table with gene name and region
     selected_features= pd.read_csv(selected_features, sep='\t')
+
     # Convert selected_features into a dictionary for fast lookup
     coverage_dict = dict(zip(selected_features['region'], selected_features['coverage']))
+
 
     # Initialize DataFrame for results
     targets = []
@@ -380,12 +505,6 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
 
             if gc_content < gc_min or gc_content > gc_max:
                 continue
-                # extract the ligations junction
-            ligation_junction = tmp_seq[int((plp_length/2)-1)] + tmp_seq[int((plp_length/2)+1)]
-            ligation_status = ligation_junctions_dict.get(ligation_junction, "non-preferred")
-            
-            if ligation_status == "non-preferred":
-                continue
 
             if not any(nucleotide * 3 in tmp_seq for nucleotide in "ACGT"):
                 continue
@@ -400,14 +519,13 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
                 "Region": f"{chr_name}:{start}-{end}",
                 "Sequence": str(tmp_seq),
                 "GC": gc_content,
-                "Ligation junction": ligation_status,
                 "Coverage": coverage_value
             })
     targets_df = pd.DataFrame(targets)
-    targets_df = select_top_probes(targets_df, num_probes)
-    targets_df.to_csv(output_file, sep='\t', index=False)
+    targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
     create_fasta(targets_df, output_file)
     print(f"✅ Final sequences saved to {output_file} and fasta file {output_file}.fa .")
+    return targets_df
 
 def create_fasta(targets_df, output_file):
     """
@@ -444,3 +562,4 @@ def select_top_probes(df, num_probes):
     
     return final_df
 
+## Check specificity functions:
