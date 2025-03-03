@@ -4,3 +4,4 @@ numpy
 logomaker
 matplotlib
 matplotlib-venn
+cutadapt
