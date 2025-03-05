@@ -457,7 +457,7 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
         DataFrame: DataFrame with extracted probe sequences.
     """
     # Create a dataframe to store the targets
-    targets = pd.DataFrame(columns=['Probe_id', 'Gene', 'Region', 'Sequence', 'GC', 'Coverage'])
+    targets = pd.DataFrame(columns=['Probe_id', 'Gene', 'Region', 'Sequence', 'GC', 'Coverage', 'Transcript_id'])
 
 
     # check if size of the probe is an even number
@@ -470,7 +470,8 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
 
     # load the selected features table with gene name and region
     selected_features= pd.read_csv(selected_features, sep='\t')
-
+    selected_features.index = selected_features['region']
+    
     # Convert selected_features into a dictionary for fast lookup
     coverage_dict = dict(zip(selected_features['region'], selected_features['coverage']))
 
@@ -519,7 +520,8 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
                 "Region": f"{chr_name}:{start}-{end}",
                 "Sequence": str(tmp_seq),
                 "GC": gc_content,
-                "Coverage": coverage_value
+                "Coverage": coverage_value,
+                "Transcript_id": selected_features.loc[region, 'transcript_id']
             })
     targets_df = pd.DataFrame(targets)
     targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
