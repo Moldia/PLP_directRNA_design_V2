@@ -1,4 +1,9 @@
 intermediate/
 data/
 codes/*.fa
+codes/*.fasta
 __pycache__/
+*.fa
+*.fasta
+*.txt
+*.csv
