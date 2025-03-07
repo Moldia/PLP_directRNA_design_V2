@@ -120,13 +120,12 @@ def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30, nu
                 iupac_mismatches = parse_iupac_mismatches(iupac_mismatches)
 
             num_mismatches = len(iupac_mismatches)
-#s            print("Num mismatch:", num_mismatches)
+
             if num_mismatches <= 2: # Limit to 2 mismatches
                 for r in range(1, num_mismatches + 1): 
                     for subset in itertools.combinations(range(num_mismatches), r): # Generate all possible combinations of mismatches
                         selected_mismatches = [iupac_mismatches[i] for i in subset]
                         replacement_options = [IUPAC_CODES[symbol] for pos, symbol in selected_mismatches]
-#                        print('Replacement options:', replacement_options)
 
                         # Generate all possible combinations of replacements
                         for replacement in itertools.product(*replacement_options):
@@ -436,6 +435,165 @@ def extract_sequences(fasta_file, regions_file, output_fasta, gtf_df):
 
     print(f"✅ Final sequences saved to {output_fasta}, with correct strand orientation and gene names.")
 
+## Extract mrna function:
+import re
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.Data import CodonTable
+
+def parse_attributes(attr_str):
+    """
+    Parse the attributes column from a GTF file.
+    Example: 'transcript_id "TX1"; gene_id "G1"; ...'
+    Returns a dictionary mapping keys to values.
+    """
+    attrs = {}
+    for part in attr_str.strip().split(';'):
+        part = part.strip()
+        if not part:
+            continue
+        m = re.match(r'(\S+)\s+"(.+)"', part)
+        if m:
+            key, value = m.groups()
+            attrs[key] = value
+        else:
+            pieces = part.split()
+            if len(pieces) >= 2:
+                key = pieces[0]
+                value = pieces[1].strip('"')
+                attrs[key] = value
+    return attrs
+
+def extract_mrna_sequences(fasta_file, gtf_file, output_file=None,
+                           plus_strand_only=False, revcomp=False,
+                           translate=False, codon_table=1,
+                           alternative_start_codon=False,
+                           clean_final_stop=False, clean_internal_stop=False,
+                           verbose=False):
+    """
+    Extracts mRNA sequences from a FASTA file using exon records from a GTF file.
+    
+    The function assumes that the GTF file uses 1-indexed, inclusive coordinates.
+    Each exon is extracted as: [start-1:end] (Python slicing).
+    
+    For both plus and negative strands, exons are first sorted in ascending order.
+    For negative strand transcripts the merged sequence is then reverse complemented
+    so that the output is in the 5'->3' orientation.
+    
+    Upstream/downstream extractions have been removed.
+    
+    Parameters:
+      fasta_file (str): Path to the reference FASTA file.
+      gtf_file (str): Path to the GTF file with exon annotations.
+      output_file (str, optional): If provided, the output FASTA will be written here.
+      plus_strand_only (bool): If True, output sequence in plus strand orientation.
+      revcomp (bool): If True, force reverse complement of the final sequence.
+      translate (bool): If True, translate the nucleotide sequence.
+      codon_table (int): NCBI codon table ID (default 1).
+      alternative_start_codon (bool): If True, force a methionine (M) at the start if valid.
+      clean_final_stop (bool): If True, remove a trailing stop codon after translation.
+      clean_internal_stop (bool): If True, replace internal stop codons with 'X'.
+      verbose (bool): If True, print progress messages.
+      
+    Returns:
+      List of SeqRecord objects (one per transcript).
+    """
+    # Index the genome FASTA for quick lookup.
+    genome = SeqIO.to_dict(SeqIO.parse(fasta_file, "fasta"))
+    
+    # Add error handling for missing FASTA and gtf entries.
+    if not genome:
+#        raise FileNotFoundError(f"FASTA file not found: {fasta_file}")
+        raise InputValueError(f"FASTA file not found: {fasta_file}", field="fasta_file", code="fasta_file_not_found")
+    if not os.path.isfile(gtf_file):
+        raise InputValueError(f"GTF file not found: {gtf_file}", field="gtf_file", code="gtf_file_not_found")
+    
+
+    # Group exon features by transcript_id.
+    transcripts = {}  # transcript_id -> {'chrom': ..., 'strand': ..., 'gene_id': ..., 'exons': [(start, end), ...]}
+    with open(gtf_file, "r") as gtf:
+        for line in gtf:
+            if line.startswith("#"):
+                continue
+            fields = line.strip().split("\t")
+            if len(fields) < 9:
+                continue
+            chrom, source, feature, start, end, score, strand, frame, attributes = fields
+            if feature.lower() != "exon":
+                continue
+            start = int(start)
+            end = int(end)
+            attr_dict = parse_attributes(attributes)
+            transcript_id = attr_dict.get("transcript_id")
+            gene_id = attr_dict.get("gene_id", "")
+            gene_name = attr_dict.get("gene_name", "")
+            if transcript_id is None:
+                continue
+            if transcript_id not in transcripts:
+                transcripts[transcript_id] = {"chrom": chrom, "strand": strand, "gene_id": gene_id, "exons": [], "gene_name": gene_name}
+            transcripts[transcript_id]["exons"].append((start, end))
+    
+    records = []
+    for transcript_id, info in transcripts.items():
+        chrom = info["chrom"]
+        strand = info["strand"]
+        gene_id = info["gene_id"]
+        exons = info["exons"]
+        gene_name = info["gene_name"]
+        if chrom not in genome:
+            if verbose:
+                print(f"Warning: Chromosome {chrom} not found in FASTA for transcript {transcript_id}.")
+            continue
+        chrom_seq = genome[chrom].seq
+
+        # Always sort exons in ascending order.
+        exons_sorted = sorted(exons, key=lambda x: x[0])
+        # Extract each exon using 1-indexed, inclusive conversion:
+        # Python slice [s-1:e] returns bases s to e (inclusive).
+        exon_seqs = [chrom_seq[s-1:e] for s, e in exons_sorted]
+        merged_seq = Seq("").join(exon_seqs)
+        
+        # For negative strand, reverse complement the merged sequence (unless forced to plus strand).
+        if strand == "-" and not plus_strand_only:
+            merged_seq = merged_seq.reverse_complement()
+        # Additionally, if revcomp is set, always reverse complement.
+        if revcomp:
+            merged_seq = merged_seq.reverse_complement()
+        
+        final_seq = merged_seq
+        
+        record_description = f"gene={gene_id} gene_name={gene_name} seq_id={chrom} type=mrna"
+        
+        # Optional translation.
+        if translate:
+            prot_seq = final_seq.translate(table=codon_table, to_stop=False)
+            if alternative_start_codon:
+                table_obj = CodonTable.unambiguous_dna_by_id[codon_table]
+                start_codon = str(final_seq[0:3])
+                if start_codon in table_obj.start_codons and prot_seq[0] != "M":
+                    prot_seq = "M" + str(prot_seq)[1:]
+            if clean_final_stop and str(prot_seq).endswith("*"):
+                prot_seq = prot_seq[:-1]
+            if clean_internal_stop:
+                if str(prot_seq).endswith("*"):
+                    prot_seq = prot_seq[:-1].replace("*", "X") + "*"
+                else:
+                    prot_seq = str(prot_seq).replace("*", "X")
+                prot_seq = Seq(prot_seq)
+            final_seq = prot_seq
+            record_description += " translated"
+        
+        record = SeqRecord(final_seq, id=transcript_id, description=record_description)
+        records.append(record)
+    
+    if output_file:
+        with open(output_file, "w") as out_handle:
+            SeqIO.write(records, out_handle, "fasta")
+        if verbose:
+            print(f"Wrote {len(records)} transcripts to {output_file}")
+    
+    return records
 
 ## Find target functions:
 def find_targets(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10, iupac_mismatches=None):
