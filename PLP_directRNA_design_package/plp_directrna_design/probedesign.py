@@ -504,7 +504,6 @@ def extract_mrna_sequences(fasta_file, gtf_file, output_file=None,
     
     # Add error handling for missing FASTA and gtf entries.
     if not genome:
-#        raise FileNotFoundError(f"FASTA file not found: {fasta_file}")
         raise InputValueError(f"FASTA file not found: {fasta_file}", field="fasta_file", code="fasta_file_not_found")
     if not os.path.isfile(gtf_file):
         raise InputValueError(f"GTF file not found: {gtf_file}", field="gtf_file", code="gtf_file_not_found")
