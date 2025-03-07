@@ -90,8 +90,12 @@ def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30, nu
 
     Args:
         probe_seq (str): The probe sequence.
-        iupac_mismatches (list of tuples): List of positions and IUPAC codes or bases to introduce mismatches. Note that the number of mismatches should be less than or equal to 2.
-                                            Example: 5:R,10:G
+        iupac_mismatches (position:base): 
+            List of positions (1-based) and IUPAC codes to introduce mismatches.        
+            Recommended positions for mismatches are **15 and 16**.
+            Example: 15:R,16:G
+            **Note:** The total number of mismatches must be ≤2. Exceeding this limit may lead to unexpected behavior.
+            
         plp_length (int): Probe length (default: 30).
 
     Returns:
@@ -608,8 +612,12 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
         gc_min (int): Minimum GC content (default: 50).
         gc_max (int): Maximum GC content (default: 65).
         num_probes (int): Number of probes to select per gene (default: 10).
-        iupac_mismatches (list of tuples): List of positions and IUPAC codes to introduce mismatches. Note that the number of mismatches should be less than or equal to 2.
-                                            Example: 5:R,10:G
+        iupac_mismatches (position:base): 
+            List of positions (1-based) and IUPAC codes to introduce mismatches.        
+            Recommended positions for mismatches are **15 and 16**.
+            Example: 15:R,16:G
+            **Note:** The total number of mismatches must be ≤2. Exceeding this limit may lead to unexpected behavior.
+
     Returns:
         DataFrame: DataFrame with extracted probe sequences.
     """
