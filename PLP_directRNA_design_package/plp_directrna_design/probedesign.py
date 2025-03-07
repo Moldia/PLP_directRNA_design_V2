@@ -525,6 +525,9 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
             })
     targets_df = pd.DataFrame(targets)
     targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
+
+    # Remove non-preferred ligation junctions
+    targets_df = select_top_probes(targets_df, num_probes)
     create_fasta(targets_df, output_file)
     print(f"✅ Final sequences saved to {output_file} and fasta file {output_file}.fa .")
     return targets_df
@@ -558,6 +561,8 @@ def select_top_probes(df, num_probes):
     df_sorted = df.sort_values(by=["Coverage", "Ligation junction"], 
                                ascending=[False, True], 
                                key=lambda col: col.map({'preferred': 0, 'neutral': 1, 'non-preferred': 2}).fillna(3))
+    # Remove probes non-preferred ligation junctions
+    df_sorted = df_sorted[df_sorted['Ligation junction'] != 'non-preferred']
     
     # Select top `num_probes`
     final_df = df_sorted.groupby("Gene").head(num_probes)
