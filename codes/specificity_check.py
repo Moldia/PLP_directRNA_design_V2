@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+#
+# Run this script with 'pipx run findprobes.py'
+#
+# /// script
+# dependencies = ["dnaio", "cutadapt"]
+# ///
+
+# TODO
+# - handle reverse complements
+
 from argparse import ArgumentParser
 from dataclasses import dataclass
 
@@ -30,16 +41,16 @@ def main():
         help="Reference FASTA (can be compressed)",
     )
     parser.add_argument(
-        "primer_path",
-        metavar="primers",
-        help="Primer sequences (FASTA, FASTQ, can be compressed)",
+        "probe_path",
+        metavar="probes",
+        help="probe sequences (FASTA, FASTQ, can be compressed)",
     )
     args = parser.parse_args()
     run(**vars(args))
 
 
-def run(reference_path, primer_path, max_errors):
-    with dnaio.open(primer_path) as f:
+def run(reference_path, probe_path, max_errors):
+    with dnaio.open(probe_path) as f:
         records = list(f)
     adapters = [
         BackAdapter(record.sequence, max_errors=max_errors, min_overlap=len(record.sequence), indels=False)
@@ -54,6 +65,7 @@ def run(reference_path, primer_path, max_errors):
         for record in references:
             for name, aligner in aligners:
                 for alignment in find_all(record.sequence, aligner):
+                    print(alignment)
                     print(f"Found {name} in {record.id} starting at {alignment.start+1} with {alignment.errors} errors")
 
 
