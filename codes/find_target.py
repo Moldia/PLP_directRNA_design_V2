@@ -31,13 +31,11 @@ def main(selected_features, fasta_file, output_file, plp_length, min_coverage, g
     """
     print(f"🔹 Loading selected features from {selected_features}...")
 
-
     targets_df = plp.find_targets(selected_features = selected_features, fasta_file = fasta_file, 
                                  plp_length = plp_length, min_coverage = min_coverage, output_file=output_file, 
                                  gc_min=gc_min, gc_max=gc_max, num_probes=num_probes, iupac_mismatches=iupac_mismatches)
     targets_df.to_csv(output_file, sep='\t', index=False)
 
-    
 
 #parser.parse_args(["--help"])  # Simulate --help call for testing
 
