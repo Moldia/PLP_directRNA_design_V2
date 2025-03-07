@@ -1,3 +1,4 @@
 intermediate/
 data/
 codes/*.fa
+__pycache__/
