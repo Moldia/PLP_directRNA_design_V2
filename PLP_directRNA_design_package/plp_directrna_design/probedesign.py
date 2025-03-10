@@ -15,7 +15,7 @@ import os
 import multiprocessing
 import subprocess
 import itertools
-
+from tqdm import tqdm  
 
 # Dictionaries
 
@@ -599,7 +599,7 @@ def extract_mrna_sequences(fasta_file, gtf_file, output_file=None,
     return records
 
 ## Find target functions:
-def find_targets(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10, iupac_mismatches=None):
+def find_targets_deprecated(selected_features, fasta_file, plp_length, min_coverage, output_file='Candidate_probes.txt', gc_min=50, gc_max=65, num_probes=10, iupac_mismatches=None):
     """
     Function to extract target sequences fulfilling the following criteria:
     Adapted from sequence developed by Sergio 
@@ -607,7 +607,7 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
         selected_features (str): Path to the selected features file (TSV format).
         fasta_file (str): Path to the indexed FASTA file.
         output_file (str): Path to the output file.
-        plp_length (int): Minimum probe length.
+        plp_length (int): Probe length (default: 30).
         min_coverage (int): Minimum coverage of the region.
         gc_min (int): Minimum GC content (default: 50).
         gc_max (int): Maximum GC content (default: 65).
@@ -694,6 +694,7 @@ def find_targets(selected_features, fasta_file, plp_length, min_coverage, output
     # Remove non-preferred ligation junctions
     targets_df = select_top_probes(targets_df, num_probes)
     create_fasta(targets_df, output_file)
+    
     print(f"✅ Final sequences saved to {output_file} and fasta file {output_file}.fa .")
     return targets_df
 
@@ -735,3 +736,228 @@ def select_top_probes(df, num_probes):
     return final_df
 
 ## Check specificity functions:
+import sys
+import os
+import pandas as pd
+import dnaio
+from Bio import SeqIO
+from Bio.Seq import Seq
+from cutadapt.adapters import BackAdapter
+from dataclasses import dataclass
+from io import StringIO
+import csv
+
+@dataclass
+class Alignment:
+    query_name: str
+    target_name: str
+    target_start: int
+    target_end: int
+    mismatches: int
+    query_sequence: str
+    target_sequence: str
+
+def find_probes_in_targets(targets_df, reference_fasta, max_errors=1, output_file=None):
+    """
+    Function to check specificity of extracted probes against a reference genome.
+    Uses Cutadapt's aligner for finding target regions.
+
+    Args:
+        targets_df (DataFrame): DataFrame containing extracted probe sequences.
+        reference_fasta (str): Path to the reference genome FASTA.
+        max_errors (int): Maximum number of allowed mismatches.
+        output_file (str, optional): Path to save the results as a CSV file.
+
+    Returns:
+        DataFrame: A DataFrame containing matched probe alignments.
+    """
+    results = []
+
+    with dnaio.open(reference_fasta) as references:
+        references = list(references)  # Load references into a list
+        total_probes = len(targets_df)  # Get total probe count
+
+        with tqdm(total=total_probes, desc="Testing probes for specificity", unit=" alignments") as pbar:
+            for reference_record in references:
+                ref_id = reference_record.id
+                ref_seq = reference_record.sequence
+
+                for _, row in targets_df.iterrows():
+                    probe_id = row["Probe_id"]
+                    probe_seq = row["Sequence"]
+
+                    adapter = BackAdapter(probe_seq, max_errors=max_errors, min_overlap=len(probe_seq), indels=False)
+                    aligner = adapter.aligner
+
+                    # Forward strand search
+                    for t_start, t_end, errors, target_seq in find_all(ref_seq, aligner):
+                        results.append(Alignment(
+                            query_name=probe_id,
+                            target_name=ref_id,
+                            target_start=t_start + 1,  # Convert to 1-based index
+                            target_end=t_end,
+                            mismatches=errors,
+                            query_sequence=probe_seq,
+                            target_sequence=target_seq
+                        ))
+                    pbar.update(1)  # Update progress bar
+
+                    # Reverse complement search
+                    rev_ref_seq = str(Seq(ref_seq).reverse_complement())
+                    adapter = BackAdapter(probe_seq, max_errors=max_errors, min_overlap=len(probe_seq), indels=False)
+                    aligner = adapter.aligner
+
+                    for t_start, t_end, errors, target_seq in find_all(rev_ref_seq, aligner):
+                        results.append(Alignment(
+                            query_name=probe_id,
+                            target_name=f"{ref_id}(reverse)",
+                            target_start=t_start + 1,
+                            target_end=t_end,
+                            mismatches=errors,
+                            query_sequence=probe_seq,
+                            target_sequence=target_seq
+                        ))
+                    pbar.update(1)  # Update progress bar again for reverse search
+
+    # Convert results to DataFrame
+    results_df = pd.DataFrame(results)
+
+    # Save results to file if requested
+    if output_file:
+        results_df.to_csv(output_file, index=False)
+        sys.stderr.write(f"Results saved to {output_file}\n")
+
+    return results_df
+
+
+def find_all(ref, aligner):
+    """Find all occurrences of a probe in a reference sequence."""
+    offset = 0
+    while True:
+        result = aligner.locate(ref)
+        if result is None:
+            break
+        ref_start, ref_end, query_start, query_end, score, errors = result
+        t_start = query_start + offset
+        t_end = query_end + offset
+        target_seq = ref[query_start:query_end]
+        yield (t_start, t_end, errors, target_seq)
+        offset += query_start + 1
+        ref = ref[query_start + 1:]
+
+def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, min_coverage=1,
+                 output_file='Candidate_probes', gc_min=50, gc_max=65, num_probes=10,
+                 iupac_mismatches=None, max_errors=1, check_specificity=False):
+    """
+    Extract target sequences based on defined probe criteria and optionally check specificity.
+
+    Args:
+        selected_features (str): Path to the selected features file (TSV format).
+        fasta_file (str): Path to the indexed FASTA file.
+        output_file (str): Path to the output file.
+        plp_length (int): Probe length (default: 30).
+        min_coverage (int): Minimum coverage of the region.
+        gc_min (int): Minimum GC content (default: 50).
+        gc_max (int): Maximum GC content (default: 65).
+        num_probes (int): Number of probes to select per gene (default: 10).
+        iupac_mismatches (position:base): 
+            List of positions (1-based) and IUPAC codes to introduce mismatches.        
+            Recommended positions for mismatches are **15 and 16**.
+            Example: 15:R,16:G
+            **Note:** The total number of mismatches must be ≤2. Exceeding this limit may lead to unexpected behavior.
+
+        max_errors (int): Maximum mismatches allowed during specificity checking.
+        check_specificity (bool): Whether to check probe specificity against reference.
+
+    Returns:
+        DataFrame: DataFrame with extracted probe sequences (and specificity results if enabled).
+    """
+
+    targets = []
+
+    seq_dict = SeqIO.to_dict(SeqIO.parse(fasta_file, "fasta"))
+    selected_features = pd.read_csv(selected_features, sep='\t')
+    selected_features.index = selected_features['region']
+    coverage_dict = dict(zip(selected_features['region'], selected_features['coverage']))
+
+    if plp_length % 2 != 0:
+        raise InputValueError("The size of the probe should be an even number", field="plp_length", code="odd_value_for_plp_length_provided")
+
+
+    for keys in seq_dict:
+        gene, region = keys.split("|")
+
+        chr_name, start_end = region.split(":")
+        initial_start = int(start_end.split("-")[0])
+        seq = seq_dict[keys].seq
+        seq_len = len(seq) - (plp_length - 1)
+
+        coverage_value = coverage_dict.get(region, 0)
+        if coverage_value < min_coverage:
+            continue 
+
+        for i in range(0, seq_len):
+            tmp_seq = seq[i:i + plp_length]
+            gc_content = (tmp_seq.count("G") + tmp_seq.count("C")) / len(tmp_seq) * 100
+
+            if not (gc_min <= gc_content <= gc_max):
+                continue
+            if not any(nucleotide * 3 in tmp_seq for nucleotide in "ACGT"):
+                continue
+
+            start = initial_start + i
+            end = start + plp_length - 1
+
+            targets.append({
+                "Probe_id": f"{gene}|{start}-{end}",
+                "Gene": gene,
+                "Region": f"{chr_name}:{start}-{end}",
+                "Sequence": str(tmp_seq),
+                "GC": gc_content,
+                "Coverage": coverage_value,
+                "Transcript_id": selected_features.loc[region, 'transcript_id']
+            })
+
+    targets_df = pd.DataFrame(targets)
+
+    # Introduction of IUPAC mismatches
+    if iupac_mismatches:
+        targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
+
+
+    # Check probe specificity against reference genome if requested
+    if check_specificity:
+        specificity_results = find_probes_in_targets(targets_df, reference_fasta, max_errors, output_file=f"{output_file}_specificity.csv")
+
+        # Identify probes that have **only one unique match**
+        unique_queries = specificity_results.groupby('query_name').size().reset_index(name='counts')
+        unique_queries = unique_queries[unique_queries['counts'] == 1]['query_name']
+
+        # Select only probes with a unique match
+        targets_df = targets_df[targets_df['Probe_id'].isin(unique_queries)]
+
+        # Merge mismatches into targets_df
+        targets_df = targets_df.merge(
+            specificity_results[['query_name', 'mismatches']],
+            left_on='Probe_id',
+            right_on='query_name',
+            how='left'
+        ).drop(columns=['query_name'])  # Drop duplicate column
+
+        print(f"✅ Specificity results saved to {output_file}_specificity.csv")
+
+    return targets_df
+
+
+def parse_specificity_results(specificity_results):
+    """
+    Parse the specificity results from the CSV file.
+
+    Args:
+        specificity_results (str): Path to the specificity results CSV file.
+
+    Returns:
+        DataFrame: DataFrame containing parsed specificity results.
+    """
+    specificity_results.group_by('Probe_id').size().reset_index(name='counts')
+    return pd.read_csv(specificity_results)
