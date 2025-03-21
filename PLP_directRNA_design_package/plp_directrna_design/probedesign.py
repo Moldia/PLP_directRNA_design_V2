@@ -16,6 +16,8 @@ import multiprocessing
 import subprocess
 import itertools
 from tqdm import tqdm  
+import matplotlib.pyplot as plt
+from Bio.SeqUtils import gc_fraction, MeltingTemp as mt
 
 # Dictionaries
 
@@ -922,7 +924,7 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
 
     # Introduction of IUPAC mismatches
     if iupac_mismatches:
-        targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
+        targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length, num_probes=num_probes)
 
 
     # Check probe specificity against reference genome if requested
@@ -961,3 +963,91 @@ def parse_specificity_results(specificity_results):
     """
     specificity_results.group_by('Probe_id').size().reset_index(name='counts')
     return pd.read_csv(specificity_results)
+
+def filter_probes_by_distance(group, min_dist_probes):
+    """
+    Filters probes based on a minimum distance between them.
+    This function takes a DataFrame containing probe information and filters out probes
+    that are too close to each other based on a specified minimum distance. The 'Region'
+    column in the DataFrame should contain coordinates in the format 'chr:start-end'.
+    Args:
+        group (pd.DataFrame): A DataFrame containing probe information with a 'Region' column.
+        min_dist_probes (int): The minimum distance required between probes.
+    Returns:
+        pd.DataFrame: A DataFrame containing the filtered probes that meet the minimum distance requirement.
+    """
+
+    # Extract start and end coordinates from the 'Region' column
+    group['Start'] = group['Region'].apply(lambda x: int(x.split(':')[1].split('-')[0]))
+    group['End'] = group['Region'].apply(lambda x: int(x.split(':')[1].split('-')[1]))
+    
+    # Sort by start coordinate
+    group = group.sort_values(by='Start')
+    
+    # Filter probes based on the minimum distance
+    filtered_probes = []
+    last_end = -min_dist_probes  # Initialize with a value that ensures the first probe is included
+    
+    for idx, row in group.iterrows():
+        if row['Start'] - last_end >= min_dist_probes:
+            filtered_probes.append(row)
+            last_end = row['End']
+    
+    return pd.DataFrame(filtered_probes)
+
+
+## Calculating weighted melting temperature functions:
+def weighted_tm_gc_scoring(sequence, Tm_oligo, Tm_min=55.0, Tm_opt=60.0, Tm_max=65.0, 
+                           GC_min=40.0, GC_opt=50.0, GC_max=60.0, w_Tm=1.0, w_GC=1.0):
+    """Compute the weighted score for a given oligo based on melting temperature and GC content."""
+    GC_oligo = gc_fraction(sequence) * 100  # Convert fraction to percentage
+    Tm_opt = (Tm_max + Tm_min) / 2
+    # Compute Tm deviation score
+    if Tm_oligo >= Tm_opt:
+        score_Tm = abs(Tm_oligo - Tm_opt) / (Tm_max - Tm_opt)
+    else:
+        score_Tm = abs(Tm_oligo - Tm_opt) / (Tm_opt - Tm_min)
+    
+    # Compute GC deviation score
+    if GC_oligo >= GC_opt:
+        score_GC = abs(GC_oligo - GC_opt) / (GC_max - GC_opt)
+    else:
+        score_GC = abs(GC_oligo - GC_opt) / (GC_opt - GC_min)
+    
+    return w_Tm * score_Tm + w_GC * score_GC  # Lower score is better
+
+
+def analyze_scores(scores, percentile=5):
+    """Analyze the score distribution and suggest a cutoff."""
+    suggested_cutoff = np.percentile(scores, percentile)  # Get the threshold for top X%
+    return suggested_cutoff
+
+
+def score_padlock_probe(sequence, Tm_min=55.0, Tm_opt=60.0, Tm_max=65.0, 
+                        GC_min=40.0, GC_opt=50.0, GC_max=60.0, w_Tm=1.0, w_GC=1.0, percentile=5):
+    """Score a padlock probe by splitting it into two arms and analyzing distribution."""
+    mid = len(sequence) // 2
+    left_arm, right_arm = sequence[:mid], sequence[mid:]
+
+    # Compute Tm for each arm
+    Tm_left = mt.Tm_NN(left_arm)
+    Tm_right = mt.Tm_NN(right_arm)
+
+    # Score each arm separately
+    score_left = weighted_tm_gc_scoring(left_arm, Tm_left, Tm_min, Tm_opt, Tm_max, GC_min, GC_opt, GC_max, w_Tm, w_GC)
+    score_right = weighted_tm_gc_scoring(right_arm, Tm_right, Tm_min, Tm_opt, Tm_max, GC_min, GC_opt, GC_max, w_Tm, w_GC)
+
+    # Combine scores (you can take the average, max, or another approach)
+    final_score = (score_left + score_right) / 2  # Averaging the scores
+
+    return final_score
+def visualize_score_distribution(scores, cutoff):
+    """Plot the score distribution and cutoff."""
+    plt.figure(figsize=(8,5))
+    plt.hist(scores, bins=30, alpha=0.7, color='blue', edgecolor='black')
+    plt.axvline(cutoff, color='red', linestyle='dashed', linewidth=2, label=f'Cutoff ({cutoff:.2f})')
+    plt.xlabel("Score")
+    plt.ylabel("Frequency")
+    plt.title("Distribution of Probe Scores")
+    plt.legend()
+    plt.show()
