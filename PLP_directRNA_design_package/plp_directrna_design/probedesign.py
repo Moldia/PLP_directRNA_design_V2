@@ -992,7 +992,8 @@ def filter_probes_by_distance(group, min_dist_probes):
         if row['Start'] - last_end >= min_dist_probes:
             filtered_probes.append(row)
             last_end = row['End']
-    
+    filtered_probes = pd.DataFrame(filtered_probes)        
+    filtered_probes = filtered_probes.drop(columns=['Start', 'End'])
     return pd.DataFrame(filtered_probes)
 
 
