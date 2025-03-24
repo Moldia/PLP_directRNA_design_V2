@@ -86,78 +86,89 @@ def parse_iupac_mismatches(mismatch_str):
     
     return mismatches
 ## Evaluate ligation junction functions:
-def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30, num_probes=10):
+def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30):
     """
     Evaluates the ligation junction of a probe and introduces mismatches if needed.
 
     Args:
-        probe_seq (str): The probe sequence.
-        iupac_mismatches (position:base): 
-            List of positions (1-based) and IUPAC codes to introduce mismatches.        
-            Recommended positions for mismatches are **15 and 16**.
-            Example: 15:R,16:G
-            **Note:** The total number of mismatches must be ≤2. Exceeding this limit may lead to unexpected behavior.
-            
-        plp_length (int): Probe length (default: 30).
+        targets (pd.DataFrame): DataFrame containing probe sequences in the 'Sequence' column.
+        iupac_mismatches (str or list of tuples): Mismatch instructions in the form "5:R,10:G" or [(5, 'R'), (10, 'G')].
+        plp_length (int): Length of the probe (default: 30).
 
     Returns:
-        tuple: (updated probe sequence, ligation junction category)
+        pd.DataFrame: Updated DataFrame with modified probes and ligation junction statuses.
     """
-    # Add Ligation junction column to the DataFrame
+    # Ensure the DataFrame has a 'Ligation junction' column
     if 'Ligation junction' not in targets.columns:
         targets['Ligation junction'] = 'non-preferred'
 
-
-    # Extract the ligation junction (2 bases around the center of the probe)
+    # Determine junction position (using the original probe indexing)
     junction_position = int((plp_length / 2) - 1)
     new_rows = []
-    for idx in targets.index:
 
+    for idx in targets.index:
         probe_seq = targets.loc[idx]['Sequence']
         ligation_junction = probe_seq[junction_position] + probe_seq[junction_position + 2]
-
-        # Determine the ligation status
         ligation_status = ligation_junctions_dict.get(ligation_junction, "non-preferred")
         targets.loc[idx, 'Ligation junction'] = ligation_status
 
-        # Apply IUPAC mismatches if provided
         if iupac_mismatches is not None:
-            if isinstance(iupac_mismatches, str):  # Only parse if it's a string
+            # If mismatches are provided as a string, parse them into a list of (pos, symbol) tuples.
+            if isinstance(iupac_mismatches, str):
                 iupac_mismatches = parse_iupac_mismatches(iupac_mismatches)
+                
+            # Limit to 2 mismatches
+            if len(iupac_mismatches) > 2:
+                raise InputValueError("The number of mismatches should be less than or equal to 2",
+                                      field="iupac_mismatches", code="mismatches_exceed_limit")
 
-            num_mismatches = len(iupac_mismatches)
+            # Convert user-provided (1-indexed) positions to 0-indexed for internal use,
+            # while preserving the original 1-indexed value for the probe ID suffix.
+            # Each tuple becomes (adjusted_pos, original_pos, iupac_symbol)
+            mismatches_converted = [(pos - 1, pos, symbol) for pos, symbol in iupac_mismatches]
 
-            if num_mismatches <= 2: # Limit to 2 mismatches
-                for r in range(1, num_mismatches + 1): 
-                    for subset in itertools.combinations(range(num_mismatches), r): # Generate all possible combinations of mismatches
-                        selected_mismatches = [iupac_mismatches[i] for i in subset]
-                        replacement_options = [IUPAC_CODES[symbol] for pos, symbol in selected_mismatches]
+            # Try all combinations of 1 or 2 mismatches
+            for r in range(1, len(mismatches_converted) + 1):
+                for subset in itertools.combinations(range(len(mismatches_converted)), r):
+                    selected_mismatches = [mismatches_converted[i] for i in subset]
+                    # For each mismatch, retrieve the possible replacement bases from IUPAC_CODES.
+                    replacement_options = [IUPAC_CODES[symbol] for _, _, symbol in selected_mismatches]
 
-                        # Generate all possible combinations of replacements
-                        for replacement in itertools.product(*replacement_options):
-                            new_probe_seq = list(probe_seq)
-                            new_id_suffix = []
-                            for (pos, iupac_symbol), new_base in zip(selected_mismatches, replacement):
-                                new_probe_seq[pos] = new_base
-                                new_id_suffix.append(f"{pos}_{iupac_symbol}_{new_base}")
-                            new_probe_seq = "".join(new_probe_seq)
+                    # Generate all possible replacement combinations.
+                    for replacement in itertools.product(*replacement_options):
+                        original_seq_list = list(probe_seq)
+                        modified_seq = original_seq_list.copy()
+                        new_id_suffix = []
+                        changes_made = False
+
+                        for (adj_pos, orig_pos, iupac_symbol), new_base in zip(selected_mismatches, replacement):
+                            original_base = original_seq_list[adj_pos]
+                            # Apply the replacement only if it results in an actual change.
+                            if original_base != new_base:
+                                modified_seq[adj_pos] = new_base
+                                new_id_suffix.append(f"{orig_pos}_{original_base}_{new_base}")
+                                changes_made = True
+
+                        # Only add a new probe row if at least one change occurred.
+                        if changes_made:
+                            new_probe_seq = "".join(modified_seq)
                             new_probe_id = f"{targets.loc[idx, 'Probe_id']}|{'_'.join(new_id_suffix)}"
-                            # Revaluate the ligation junction
+                            
+                            # Re-evaluate the ligation junction with the new sequence.
                             new_ligation_junction = new_probe_seq[junction_position] + new_probe_seq[junction_position + 2]
                             new_ligation_status = ligation_junctions_dict.get(new_ligation_junction, "non-preferred")
+
                             new_row = targets.loc[idx].copy()
                             new_row['Sequence'] = new_probe_seq
                             new_row['Ligation junction'] = new_ligation_status
                             new_row['Probe_id'] = new_probe_id
-                            new_rows.append((new_probe_id, new_row))
-            else:
-                raise InputValueError("The number of mismatches should be less than or equal to 2", field="iupac_mismatches", code="mismatches_exceed_limit")
-   
-    # Append the new rows to the DataFrame
-    new_rows_df = pd.DataFrame([row[1] for row in new_rows], index=[row[0] for row in new_rows])
-    targets = pd.concat([targets, new_rows_df])
-    return targets
 
+                            new_rows.append((new_probe_id, new_row))
+
+    # Append the new rows to the DataFrame, if any.
+    if new_rows:
+        new_rows_df = pd.DataFrame([row[1] for row in new_rows], index=[row[0] for row in new_rows])
+        targets = pd.concat([targets, new_rows_df])
 
 
 ## Custom exception classes:
@@ -924,7 +935,7 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
 
     # Introduction of IUPAC mismatches
     if iupac_mismatches:
-        targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length, num_probes=num_probes)
+        targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
 
 
     # Check probe specificity against reference genome if requested
@@ -948,6 +959,7 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
 
         print(f"✅ Specificity results saved to {output_file}_specificity.csv")
 
+    #targets_df = select_top_probes(targets_df, num_probes)
     return targets_df
 
 
