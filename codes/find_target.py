@@ -34,7 +34,6 @@ def main(selected_features, fasta_file, output_file, reference_fasta, min_covera
     """
     print(f"🔹 Loading selected features from {selected_features}...")
 
-    print("DEBUG:", plp_length)
     targets_df = plp.find_targets(selected_features = selected_features, fasta_file = fasta_file, reference_fasta = reference_fasta,
                                  plp_length = plp_length, min_coverage = min_coverage, output_file=output_file, 
                                  gc_min=gc_min, gc_max=gc_max, num_probes=num_probes, iupac_mismatches=iupac_mismatches,
