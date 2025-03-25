@@ -170,6 +170,7 @@ def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30):
         new_rows_df = pd.DataFrame([row[1] for row in new_rows], index=[row[0] for row in new_rows])
         targets = pd.concat([targets, new_rows_df])
 
+    return targets
 
 ## Custom exception classes:
 class InputValueError(ValueError):
@@ -959,7 +960,12 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
 
         print(f"✅ Specificity results saved to {output_file}_specificity.csv")
 
-    #targets_df = select_top_probes(targets_df, num_probes)
+
+    # Debugging
+#    print("Debugging:")
+#    print(targets_df.shape[0], "probes extracted.")
+#    targets_df = select_top_probes(targets_df, num_probes)
+#    print(targets_df)
     return targets_df
 
 
