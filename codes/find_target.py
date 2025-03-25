@@ -51,6 +51,8 @@ def main(selected_features, fasta_file, output_file, reference_fasta, min_covera
     # filter the probes based on the ligation junction preferences
     if filter_ligation_junction:
         targets_df = targets_df[targets_df['Ligation junction'] != 'non-preferred']
+
+    targets_df = plp.select_top_probes(targets_df, num_probes)
     # Save the output    
     targets_df.to_csv(output_file, sep='\t', index=False)
 
