@@ -1,67 +1,61 @@
-# Use Ubuntu as the base image
+# Use Ubuntu 20.04 as base image
 FROM ubuntu:20.04
 
-# Set environment variables to prevent interactive prompts during package installation
+# Set non-interactive mode for apt
 ENV DEBIAN_FRONTEND=noninteractive
+ENV LC_ALL=C
 
-# Install system dependencies
+# Set working directory
+WORKDIR /app
+
+# Install system and bioinformatics build dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     make \
     gcc \
+    g++ \
     python3 \
     python3-pip \
-    python3-cutadapt \
+    build-essential \
+    software-properties-common \
+    automake \
+    autoconf \
+    perl \
+    m4 \
+    file \
+    zlib1g-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libcurl4-gnutls-dev \
+    libssl-dev \
+    libncurses5-dev \
+    libdeflate-dev \
+    bedtools \
     && apt-get clean
 
-# Install Python dependencies
-WORKDIR /app
+# Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Install bedtools
-RUN apt-get update && apt-get install -y \
-    software-properties-common \
-    && add-apt-repository universe \
-    && apt-get update \
-    && apt-get install -y bedtools \
-    && apt-get clean
+# Copy and install local Python package
+COPY PLP_directRNA_design_package /app/PLP_directRNA_design_package
+WORKDIR /app/PLP_directRNA_design_package
+RUN pip3 install .
+WORKDIR /app  
 
-## Install samtools dependencies
-RUN apt-get update && apt-get install -y \
-    autoconf \
-    && apt-get clean
-
-RUN apt-get update && apt-get install -y \
-    automake perl zlib1g-dev libbz2-dev liblzma-dev libcurl4-gnutls-dev libssl-dev libncurses5-dev libdeflate-dev \
-    && apt-get clean
-
-## Install samtools
+# Download, build, and install samtools from source
 RUN wget https://github.com/samtools/samtools/releases/download/1.21/samtools-1.21.tar.bz2 \
     && tar -xjf samtools-1.21.tar.bz2 \
     && rm samtools-1.21.tar.bz2 \
     && cd samtools-1.21 \
     && autoheader \
-    && autoconf -Wno-syntax \ 
+    && autoconf -Wno-syntax \
     && ./configure \
     && make \
-    && make install
+    && make install \
+    && cd .. \
+    && rm -rf samtools-1.21
 
-# Add local Python package (PLP_directRNA_design)
-COPY PLP_directRNA_design /app/PLP_directRNA_design
-
-# Expose the port for Jupyter Notebook
-EXPOSE 8888
-
-# Install Jupyter Notebook
-RUN pip3 install notebook
-
-## Set perl locale settings
-ENV LC_ALL=C
-
-# Set the working directory
-WORKDIR /app
-
-# Start a shell for manual debugging
+# Default shell for debugging
 CMD ["bash"]

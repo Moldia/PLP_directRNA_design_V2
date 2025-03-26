@@ -4,3 +4,5 @@ numpy
 logomaker
 matplotlib
 matplotlib-venn
+tqdm
+cutadapt==4.9
