@@ -19,47 +19,30 @@ Build the Docker image using the docker build command. Replace <image-name> with
 docker build -t plp_probe_design_v2 .
 ```
 # Running the docker image   
-## Step 1: Run the Docker Container
 After successfully building the image, create and run a container using the following command:
 ```
-docker run -it --rm -p 2222:2222 plp_probe_design_v2
+docker run -it -v $PWD:/app plp_probe_design_v2
 ```
-## Step 2: Checking installation of required tools (`blat` & `cutadapt`)
-You can test whether `blat` is installed just running the tool without any parameters which print the help:  
-```
-blat 
-```
+
 You can test whether `cutadapt` is installed:  
 ```
 cutadapt --version
 ```
-## Step 3: Start Jupyter Notebook from Within the Container
-After entering the container's shell, start the Jupyter Notebook with the following command:
-```
-jupyter notebook --ip=0.0.0.0 --port=2222 --no-browser --allow-root
-```
-Then in your browser open this address:
-`http://localhost:2222` 
-
-# Mounting data to Docker Container
-You should mount the data and relevant files (e.g. jupyter notebooks)
-```
-docker run -it -p 2222:2222 \
-  -v /home/nima/Lee_2023/nima_dataset/:/app \
-  -v /home/nima/PLP_directRNA_design_V2/codes/Benchmarking.ipynb:/app/Benchmarking.ipynb  \
-  plp_probe_design_v2
-```
-Any changes you make to the mounted files or directories inside the container will be reflected in the original files on your host system. 
 
 # Running  
-## extract features
+## Extract features
 `python3 codes/extract_features.py --gtf data/tmp.gtf --genes Grik2 --identifier_type gene_name --gene_feature CDS --output extract_features_output.txt`
+
+## Extract transcriptome
+`python3 codes/extract_mrna.py --gtf data/tmp.gtf --fasta data/Mus.fa --output_file data/transcriptome_out.fa`  
+
+_This step can be parallelized together with `extract_features.py` and the output is required by last step `find_target.py`_  
 
 ## Extract sequences
 `python3 codes/extract_sequences.py --fasta data/Mus.fa --output_fasta extract_seqs_output.fa --identifier_type gene_name --plp_length 30 --gtf_output extract_features_output.txt`
 
 ## Find targets
-`python3 codes/find_target.py --selected_features extract_features_output.txt --fasta_file extract_seqs_output.fa --output_file targets.txt --iupac_mismatches "5:R,10:G" --reference_fasta data/Mus.fa --max_errors 4 --Tm_min 58 --Tm_max 62 --lowest_percentile_Tm_score_cutoff 5 --min_dist_probes 8 --filter_ligation_junction`
+`python3 codes/find_target.py --selected_features extract_features_output.txt --fasta_file extract_seqs_output.fa --output_file targets.txt --iupac_mismatches "5:R,10:G" --reference_fasta data/transcriptome_out.fa --max_errors 4 --Tm_min 58 --Tm_max 62 --lowest_percentile_Tm_score_cutoff 5 --min_dist_probes 8 --filter_ligation_junction`
 
 ```mermaid
 flowchart LR
