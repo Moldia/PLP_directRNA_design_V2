@@ -72,7 +72,10 @@ python3 codes/run_probe_design.py \
 --find_target_lowest_percentile_Tm_score_cutoff 5 \
 --find_target_min_dist_probes 8 \
 --find_target_filter_ligation_junction \
---find_target_num_probes 15 
+--find_target_num_probes 15
+```
+
+
 ```mermaid
 flowchart LR
   %% Inputs (Top Layer)
