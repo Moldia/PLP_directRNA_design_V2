@@ -1,68 +1,111 @@
-import subprocess
 import argparse
+import subprocess
+import threading
 
-def run_command(command):
-    """
-    Runs a shell command and prints output/errors in real-time.
+def run_extract_features(args):
+    cmd = [
+        "python3", "codes/extract_features.py",
+        "--gtf", args.extract_features_gtf,
+        "--genes", args.extract_features_genes,
+        "--identifier_type", args.extract_features_identifier_type,
+        "--gene_feature", args.extract_features_gene_feature,
+        "--output", args.extract_features_output
+    ]
+    subprocess.run(cmd, check=True)
 
-    Args:
-        command (list): Command to execute as a list of strings.
-    """
-    print(f"\n🚀 Running: {' '.join(command)}\n")
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+def run_extract_transcriptome(args):
+    cmd = [
+        "python3", "codes/extract_mrna.py",
+        "--gtf", args.extract_transcriptome_gtf,
+        "--fasta", args.extract_transcriptome_fasta,
+        "--output_file", args.extract_transcriptome_output_file
+    ]
+    subprocess.run(cmd, check=True)
 
-    for line in process.stdout:
-        print(line, end="")  
+def run_extract_sequences(args):
+    cmd = [
+        "python3", "codes/extract_sequences.py",
+        "--fasta", args.extract_sequences_fasta,
+        "--output_fasta", args.extract_sequences_output_fasta,
+        "--identifier_type", args.extract_sequences_identifier_type,
+        "--plp_length", str(args.extract_sequences_plp_length),
+        "--gtf_output", args.extract_sequences_gtf_output
+    ]
+    subprocess.run(cmd, check=True)
 
-    stderr_output = process.stderr.read()
-    if stderr_output:
-        print(f"\n❌ Error:\n{stderr_output}")
+def run_find_targets(args):
+    cmd = [
+        "python3", "codes/find_target.py",
+        "--selected_features", args.find_target_selected_features,
+        "--fasta_file", args.find_target_fasta_file,
+        "--output_file", args.find_target_output_file,
+        "--iupac_mismatches", args.find_target_iupac_mismatches,
+        "--reference_fasta", args.find_target_reference_fasta,
+        "--max_errors", str(args.find_target_max_errors),
+        "--Tm_min", str(args.find_target_Tm_min),
+        "--Tm_max", str(args.find_target_Tm_max),
+        "--lowest_percentile_Tm_score_cutoff", str(args.find_target_lowest_percentile_Tm_score_cutoff),
+        "--min_dist_probes", str(args.find_target_min_dist_probes),
+        "--num_probes", args.find_target_num_probes
+    ]
+    if args.find_target_filter_ligation_junction:
+        cmd.append("--filter_ligation_junction")
+    subprocess.run(cmd, check=True)
 
-    process.wait()
-    if process.returncode != 0:
-        print(f"\n❌ Command failed: {' '.join(command)}")
-        exit(1)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Master script to run the workflow: Extract transcriptome, Extract features, Extract sequences, and Find targets."
+    )
 
-def main():
-    parser = argparse.ArgumentParser(description="Run probe design pipeline")
+    # Group: Extract Features
+    parser.add_argument("--extract_features_gtf", default="data/tmp.gtf", help="Path to the GTF file for extract_features.py")
+    parser.add_argument("--extract_features_genes", default="Grik2", help="Gene names for extract_features.py")
+    parser.add_argument("--extract_features_identifier_type", default="gene_name", help="Identifier type for extract_features.py")
+    parser.add_argument("--extract_features_gene_feature", default="CDS", help="Gene feature for extract_features.py")
+    parser.add_argument("--extract_features_output", default="extract_features_output.txt", help="Output file for extract_features.py")
 
-    # Arguments for extract_features.py
-    parser.add_argument("--gtf", required=True, help="Path to GTF file")
-    parser.add_argument("--output", default="output_sequences.txt", help="Output file for extracted features")
-    parser.add_argument("--genes", required=True, help="Comma-separated list of gene names or IDs")
-    parser.add_argument("--gene_feature", default="CDS", help="Feature type to extract (default: CDS)")
-    parser.add_argument("--identifier_type", default="gene_name", choices=["gene_id", "gene_name"], help="Identifier type")
+    # Group: Extract Transcriptome
+    parser.add_argument("--extract_transcriptome_gtf", default="data/tmp.gtf", help="Path to the GTF file for extract_mrna.py")
+    parser.add_argument("--extract_transcriptome_fasta", default="data/Mus.fa", help="Path to the FASTA file for extract_mrna.py")
+    parser.add_argument("--extract_transcriptome_output_file", default="data/transcriptome_out.fa", help="Output file for extract_mrna.py")
 
-    # Arguments for extract_sequences.py
-    parser.add_argument("--fasta", required=True, help="Path to the reference FASTA file")
-    parser.add_argument("--output_fasta", default="regions.fa", help="Output FASTA file with extracted sequences")
-    parser.add_argument("--plp_length", default=30, type=int, help="Minimum probe length")
+    # Group: Extract Sequences
+    parser.add_argument("--extract_sequences_fasta", default="data/Mus.fa", help="Path to the FASTA file for extract_sequences.py")
+    parser.add_argument("--extract_sequences_output_fasta", default="extract_seqs_output.fa", help="Output FASTA file for extract_sequences.py")
+    parser.add_argument("--extract_sequences_identifier_type", default="gene_name", help="Identifier type for extract_sequences.py")
+    parser.add_argument("--extract_sequences_plp_length", type=int, default=30, help="PLP length for extract_sequences.py")
+    parser.add_argument("--extract_sequences_gtf_output", default="extract_features_output.txt", help="Output GTF from extract_features.py for extract_sequences.py")
+
+    # Group: Find Targets
+    parser.add_argument("--find_target_selected_features", default="extract_features_output.txt", help="Selected features file for find_target.py")
+    parser.add_argument("--find_target_fasta_file", default="extract_seqs_output.fa", help="FASTA file for find_target.py")
+    parser.add_argument("--find_target_output_file", default="targets.txt", help="Output file for find_target.py")
+    parser.add_argument("--find_target_iupac_mismatches", default="5:R,10:G", help="IUPAC mismatches for find_target.py")
+    parser.add_argument("--find_target_reference_fasta", default="data/transcriptome_out.fa", help="Reference FASTA for find_target.py")
+    parser.add_argument("--find_target_max_errors", type=int, default=4, help="Max errors for find_target.py")
+    parser.add_argument("--find_target_Tm_min", type=int, default=58, help="Tm_min for find_target.py")
+    parser.add_argument("--find_target_Tm_max", type=int, default=62, help="Tm_max for find_target.py")
+    parser.add_argument("--find_target_lowest_percentile_Tm_score_cutoff", type=int, default=5, help="Lowest percentile Tm score cutoff for find_target.py")
+    parser.add_argument("--find_target_min_dist_probes", type=int, default=8, help="Minimum distance between probes for find_target.py")
+    parser.add_argument("--find_target_filter_ligation_junction", action="store_true", help="Include this flag to filter ligation junction for find_target.py")
+    parser.add_argument("--find_target_num_probes", default="10", help="Number of probes to select for find_target.py")
 
     args = parser.parse_args()
 
-    # Step 1: Run extract_features.py
-    extract_features_cmd = [
-        "python", "extract_features.py",
-        "--gtf", args.gtf,
-        "--output", args.output,
-        "--genes", args.genes,
-        "--gene_feature", args.gene_feature,
-        "--identifier_type", args.identifier_type
-    ]
-    run_command(extract_features_cmd)
+    # Run extract_features and extract_transcriptome in parallel
+    thread_features = threading.Thread(target=run_extract_features, args=(args,))
+    thread_transcriptome = threading.Thread(target=run_extract_transcriptome, args=(args,))
+    thread_features.start()
+    thread_transcriptome.start()
 
-    # Step 2: Run extract_sequences.py
-    extract_sequences_cmd = [
-        "python", "extract_sequences.py",
-        "--gtf_output", args.output,  # Uses output from extract_features.py
-        "--fasta", args.fasta,
-        "--output_fasta", args.output_fasta,
-        "--plp_length", str(args.plp_length),
-        "--identifier_type", args.identifier_type
-    ]
-    run_command(extract_sequences_cmd)
+    # Wait for both parallel tasks to finish
+    thread_features.join()
+    thread_transcriptome.join()
 
-    print("\n✅ All steps completed successfully!")
+    # Run extract_sequences (depends on output from extract_features)
+    run_extract_sequences(args)
 
-if __name__ == "__main__":
-    main()
+    # Run find_targets (requires outputs from previous steps)
+    run_find_targets(args)
+
+    print("Workflow completed successfully.")
