@@ -44,6 +44,35 @@ _This step can be parallelized together with `extract_features.py` and the outpu
 ## Find targets
 `python3 codes/find_target.py --selected_features extract_features_output.txt --fasta_file extract_seqs_output.fa --output_file targets.txt --iupac_mismatches "5:R,10:G" --reference_fasta data/transcriptome_out.fa --max_errors 4 --Tm_min 58 --Tm_max 62 --lowest_percentile_Tm_score_cutoff 5 --min_dist_probes 8 --filter_ligation_junction`
 
+
+## Run whole workflow  
+```
+python3 codes/run_probe_design.py \
+--extract_features_gtf data/tmp.gtf \
+--extract_features_genes Grik2 \
+--extract_features_identifier_type gene_name \
+--extract_features_gene_feature CDS \
+--extract_features_output extract_features_output.txt \
+--extract_transcriptome_gtf data/tmp.gtf \
+--extract_transcriptome_fasta data/Mus.fa \
+--extract_transcriptome_output_file data/transcriptome_out.fa \
+--extract_sequences_fasta data/Mus.fa \
+--extract_sequences_output_fasta extract_seqs_output.fa \
+--extract_sequences_identifier_type gene_name \
+--extract_sequences_plp_length 30 \
+--extract_sequences_gtf_output extract_features_output.txt \
+--find_target_selected_features extract_features_output.txt \
+--find_target_fasta_file extract_seqs_output.fa \
+--find_target_output_file targets.txt \
+--find_target_iupac_mismatches 5:R,10:G \
+--find_target_reference_fasta data/transcriptome_out.fa \
+--find_target_max_errors 4 \
+--find_target_Tm_min 58 \
+--find_target_Tm_max 62 \
+--find_target_lowest_percentile_Tm_score_cutoff 5 \
+--find_target_min_dist_probes 8 \
+--find_target_filter_ligation_junction \
+--find_target_num_probes 15 
 ```mermaid
 flowchart LR
   %% Inputs (Top Layer)
