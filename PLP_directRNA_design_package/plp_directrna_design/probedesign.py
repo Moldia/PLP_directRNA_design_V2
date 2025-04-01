@@ -923,7 +923,7 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
             end = start + plp_length - 1
 
             targets.append({
-                "Probe_id": f"{gene}|{start}-{end}",
+                "Probe_id": f"{gene}|{chr_name}:{start}-{end}",
                 "Gene": gene,
                 "Region": f"{chr_name}:{start}-{end}",
                 "Sequence": str(tmp_seq),
