@@ -28,16 +28,26 @@ def main(selected_features, fasta_file, output_file, reference_fasta, min_covera
          gc_min=50, gc_max=65, num_probes=10, iupac_mismatches=None, max_errors = 1, 
          check_specificity = False, plp_length=30, Tm_min=55, Tm_max=65, 
          lowest_percentile_Tm_score_cutoff=5, min_dist_probes=10,
-         filter_ligation_junction=True):
+         filter_ligation_junction=True, off_target_output=False):
     """
     Main function for probe extraction.
     """
     print(f"🔹 Loading selected features from {selected_features}...")
 
-    targets_df = plp.find_targets(selected_features = selected_features, fasta_file = fasta_file, reference_fasta = reference_fasta,
+    if off_target_output:
+        print("🔹 Off-target output is enabled. Off-target information will be saved to a separate file.")
+        targets_df, off_target_info = plp.find_targets(selected_features = selected_features, fasta_file = fasta_file, reference_fasta = reference_fasta,
                                  plp_length = plp_length, min_coverage = min_coverage, output_file=output_file, 
                                  gc_min=gc_min, gc_max=gc_max, num_probes=num_probes, iupac_mismatches=iupac_mismatches,
-                                 max_errors=max_errors, check_specificity=check_specificity)
+                                 max_errors=max_errors, check_specificity=check_specificity, off_target_output=True)
+        # Save the off-target information
+        off_target_info.to_csv(output_file.replace('.tsv', '_off_target.tsv'), sep='\t', index=False)
+    else:
+        targets_df, off_target_info = plp.find_targets(selected_features = selected_features, fasta_file = fasta_file, reference_fasta = reference_fasta,
+                                 plp_length = plp_length, min_coverage = min_coverage, output_file=output_file, 
+                                 gc_min=gc_min, gc_max=gc_max, num_probes=num_probes, iupac_mismatches=iupac_mismatches,
+                                 max_errors=max_errors, check_specificity=check_specificity, off_target_output=False)
+
     # Calculate the melting temperature scores
     sequences = targets_df['Sequence']
     scores = [plp.score_padlock_probe(seq, Tm_min = Tm_min, Tm_max= Tm_max) for seq in sequences]
@@ -73,6 +83,7 @@ parser.add_argument("--Tm_max", default = 65.0, type=float, help="Maximum meltin
 parser.add_argument("--lowest_percentile_Tm_score_cutoff", default = 5, type=int, help="The lowest percentile of the melting temperature score cutoff to filter")
 parser.add_argument("--min_dist_probes", default = 10, type=int, help="Minimum distance between probes")
 parser.add_argument("--filter_ligation_junction", action="store_true", help="Filter probes based on ligation junction preferences; exclude non-preferred")
+parser.add_argument("--off_target_output", action="store_true", help="Output off-target information")
 
 args = parser.parse_args()
 
