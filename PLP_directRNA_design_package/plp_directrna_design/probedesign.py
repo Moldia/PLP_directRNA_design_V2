@@ -207,8 +207,24 @@ def parse_gtf_to_dataframe(gtf_path: str) -> pd.DataFrame:
         'strand', 'frame', 'attribute'
     ]
     
+    dtype_dict = {
+        'seqname': str,
+        'source': str,
+        'feature': str,
+        'start': int,
+        'end': int,
+        'score': str,
+        'strand': str,
+        'frame': str,
+        'attribute': str
+    }
+    
     # Read the GTF file, skipping comments
-    df = pd.read_csv(gtf_path, sep='\t', header=None, names=col_names, comment='#', dtype={'score': str})
+    with open(gtf_path, 'r') as f:
+        cleaned_text = ''.join(line for line in f if not line.lstrip().startswith('#'))
+    buffer = StringIO(cleaned_text)
+
+    df = pd.read_csv(buffer, sep='\t', header=None, names=col_names, dtype=dtype_dict)
 
     # Define attributes to extract
     attributes = [
