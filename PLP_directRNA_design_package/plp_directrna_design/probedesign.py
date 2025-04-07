@@ -861,34 +861,32 @@ def find_all(ref, aligner):
 
 def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, min_coverage=1,
                  output_file='Candidate_probes', gc_min=50, gc_max=65, num_probes=10,
-                 iupac_mismatches=None, max_errors=1, check_specificity=False):
+                 iupac_mismatches=None, max_errors=1, check_specificity=False, off_target_output=False):
     """
     Extract target sequences based on defined probe criteria and optionally check specificity.
 
     Args:
         selected_features (str): Path to the selected features file (TSV format).
         fasta_file (str): Path to the indexed FASTA file.
-        output_file (str): Path to the output file.
+        reference_fasta (str): Path to the reference genome FASTA.
+        output_file (str): Base path for the output files.
         plp_length (int): Probe length (default: 30).
         min_coverage (int): Minimum coverage of the region.
         gc_min (int): Minimum GC content (default: 50).
         gc_max (int): Maximum GC content (default: 65).
         num_probes (int): Number of probes to select per gene (default: 10).
-        iupac_mismatches (position:base): 
-            List of positions (1-based) and IUPAC codes to introduce mismatches.        
-            Recommended positions for mismatches are **15 and 16**.
-            Example: 15:R,16:G
-            **Note:** The total number of mismatches must be ≤2. Exceeding this limit may lead to unexpected behavior.
-
+        iupac_mismatches (str): IUPAC mismatch specification (e.g., "15:R,16:G").
         max_errors (int): Maximum mismatches allowed during specificity checking.
         check_specificity (bool): Whether to check probe specificity against reference.
+        off_target_output (bool): Whether to save off-target probe information.
 
     Returns:
-        DataFrame: DataFrame with extracted probe sequences (and specificity results if enabled).
+        tuple: (DataFrame with extracted (and filtered) probe sequences, off-target details or None)
     """
 
     targets = []
 
+    # Read the FASTA file and selected features
     seq_dict = SeqIO.to_dict(SeqIO.parse(fasta_file, "fasta"))
     selected_features = pd.read_csv(selected_features, sep='\t')
     selected_features.index = selected_features['region']
@@ -897,20 +895,17 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
     if plp_length % 2 != 0:
         raise InputValueError("The size of the probe should be an even number", field="plp_length", code="odd_value_for_plp_length_provided")
 
-
-    for keys in seq_dict:
-        gene, region = keys.split("|")
-
+    for key in seq_dict:
+        gene, region = key.split("|")
         chr_name, start_end = region.split(":")
         initial_start = int(start_end.split("-")[0])
-        seq = seq_dict[keys].seq
+        seq = seq_dict[key].seq
         seq_len = len(seq) - (plp_length - 1)
-
         coverage_value = coverage_dict.get(region, 0)
         if coverage_value < min_coverage:
             continue 
 
-        for i in range(0, seq_len):
+        for i in range(seq_len):
             tmp_seq = seq[i:i + plp_length]
             gc_content = (tmp_seq.count("G") + tmp_seq.count("C")) / len(tmp_seq) * 100
 
@@ -934,40 +929,87 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
 
     targets_df = pd.DataFrame(targets)
 
-    # Introduction of IUPAC mismatches
-    if iupac_mismatches:
-        targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
+    # Introduce IUPAC mismatches if specified and check ligation junctions. Or just check ligation junctions
 
+    targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
+
+    off_target_info = None  # default when specificity is not checked
 
     # Check probe specificity against reference genome if requested
     if check_specificity:
-        specificity_results = find_probes_in_targets(targets_df, reference_fasta, max_errors, output_file=f"{output_file}_specificity.csv")
-
-        # Identify probes that have **only one unique match**
-        unique_queries = specificity_results.groupby('query_name').size().reset_index(name='counts')
-        unique_queries = unique_queries[unique_queries['counts'] == 1]['query_name']
-
-        # Select only probes with a unique match
-        targets_df = targets_df[targets_df['Probe_id'].isin(unique_queries)]
-
-        # Merge mismatches into targets_df
-        targets_df = targets_df.merge(
-            specificity_results[['query_name', 'mismatches']],
-            left_on='Probe_id',
-            right_on='query_name',
-            how='left'
-        ).drop(columns=['query_name'])  # Drop duplicate column
-
+        specificity_results = find_probes_in_targets(targets_df, reference_fasta, max_errors, 
+                                                     output_file=f"{output_file}_specificity.csv")
+        off_target_file = f"{output_file}_off_targets.csv" if off_target_output else None
+        valid_targets_df, off_target_info = filter_probes_by_specificity(targets_df, specificity_results,
+                                                                         off_target_output_file=off_target_file)
+        targets_df = valid_targets_df
         print(f"✅ Specificity results saved to {output_file}_specificity.csv")
 
+    # Further filtering (e.g., select_top_probes) can be done here if desired
 
-    # Debugging
-#    print("Debugging:")
-#    print(targets_df.shape[0], "probes extracted.")
-#    targets_df = select_top_probes(targets_df, num_probes)
-#    print(targets_df)
-    return targets_df
+    return targets_df, off_target_info
 
+
+def filter_probes_by_specificity(targets_df, specificity_results, off_target_output_file=None):
+    """
+    Filter candidate probes by verifying that all observed specificity results match the expected transcript IDs.
+    
+    Args:
+        targets_df (DataFrame): DataFrame with candidate probes. Expected to have:
+            - 'Probe_id'
+            - 'Transcript_id' (semicolon-separated string)
+        specificity_results (DataFrame): DataFrame with specificity results. Expected to have:
+            - 'query_name'
+            - 'target_name'
+        off_target_output_file (str, optional): Path to save off-target probe information.
+        
+    Returns:
+        tuple: (DataFrame of valid probes reassembled to one row per probe, list of off-target details)
+    """
+    # Expand targets_df by splitting Transcript_id on ';'
+    targets_expanded = targets_df.assign(
+        Transcript_id=targets_df['Transcript_id'].str.split(';')
+    ).explode('Transcript_id')
+    
+    # Create composite key for expected mappings
+    targets_expanded['probe_id_transcript_id'] = targets_expanded['Probe_id'] + '_' + targets_expanded['Transcript_id']
+    
+    # Create composite key in specificity results
+    specificity_results['probe_id_transcript_id'] = specificity_results['query_name'] + '_' + specificity_results['target_name']
+    
+    valid_probes = []
+    off_target_details = []  # To capture details of off-target probes
+    
+    # Evaluate each probe's specificity
+    for probe_id, group in targets_expanded.groupby('Probe_id'):
+        expected = set(group['probe_id_transcript_id'])
+        observed = set(specificity_results.loc[specificity_results['query_name'] == probe_id, 'probe_id_transcript_id'])
+        
+        if observed.issubset(expected):
+            valid_probes.append(probe_id)
+        else:
+            off_target_details.append({
+                'Probe_id': probe_id,
+                'Expected': expected,
+                'Observed': observed,
+                'Off_targets': observed - expected
+            })
+    
+    # Filter to keep only valid probes
+    valid_targets = targets_expanded[targets_expanded['Probe_id'].isin(valid_probes)]
+    
+    # Reassemble transcript IDs into a semicolon-separated string per probe
+    valid_targets_df = valid_targets.groupby(
+        ['Probe_id', 'Gene', 'Region', 'Sequence', 'GC', 'Coverage'], as_index=False
+    ).agg({'Transcript_id': ';'.join})
+    
+    # Optionally save off-target details to a CSV file
+    if off_target_output_file and off_target_details:
+        off_target_df = pd.DataFrame(off_target_details)
+        off_target_df.to_csv(off_target_output_file, index=False)
+        print(f"Off-target probe details saved to {off_target_output_file}")
+    
+    return valid_targets_df, off_target_df
 
 def parse_specificity_results(specificity_results):
     """
