@@ -245,7 +245,49 @@ def parse_gtf_to_dataframe(gtf_path: str) -> pd.DataFrame:
     
     return df
 
-def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id', gene_feature='CDS'):
+def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id'):
+    """
+    Parses a GTF file and yields data only for the specified genes_of_interest.
+
+    Args:
+        gtf_file (str): Path to the GTF file.
+        genes_of_interest (set or None): A set of gene IDs or names to parse.
+                                         If None, parse all genes in the GTF.
+        identifier_type (str): Type of identifier provided ('gene_id' or 'gene_name').
+
+    Returns:
+        pd.DataFrame: A DataFrame containing parsed GTF data.
+    """
+    print('Parsing GTF file....')
+    # Read the GTF file into a DataFrame
+    gtf_df = parse_gtf_to_dataframe(gtf_file)
+
+    # Convert gene names to lowercase for case-insensitive matching
+    if genes_str:
+            genes_of_interest = set([g.strip().lower() for g in genes_str.split(",")])
+            print(f"Processing genes: {', '.join(genes_of_interest)}")
+    else:
+        genes_of_interest = None
+        raise InputValueError("No gene list provided. Processing all genes. $genes_of_interest", field="genes_of_interest", code="no_gene_list_provided")
+
+    # Check if a gene list is provided and filter accordingly
+    
+    if genes_of_interest:
+        if identifier_type == 'gene_id':
+            gtf_df = gtf_df[gtf_df['gene_id'].str.lower().isin(genes_of_interest) & ((gtf_df['feature'] == 'CDS') | (gtf_df['feature'] == 'exon'))]
+        elif identifier_type == 'gene_name':
+            gtf_df = gtf_df[gtf_df['gene_name'].str.lower().isin(genes_of_interest) & ((gtf_df['feature'] == 'CDS') | (gtf_df['feature'] == 'exon'))]
+
+        else:
+            raise InputValueError("Gene identifier type must be 'gene_id' or 'gene_name'", field="identifier_type", code="no_identifier_type_provided")
+            
+
+    if len(gtf_df) == 0:
+        raise InputValueError("No matching genes found in the GTF file. This can be due to either incomplete gtf file or errors in gene identifications.", field="genes_of_interest", code="no_matching_genes_found")
+
+    return gtf_df, genes_of_interest
+
+def parse_gtf_with_gene_feature(gtf_file, genes_str=None, identifier_type='gene_id', gene_feature='CDS'):
     """
     Parses a GTF file and yields data only for the specified genes_of_interest.
 
@@ -957,7 +999,8 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
                                                      output_file=f"{output_file}_specificity.csv")
         off_target_file = f"{output_file}_off_targets.csv" if off_target_output else None
         valid_targets_df, off_target_info = filter_probes_by_specificity(targets_df, specificity_results,
-                                                                         off_target_output_file=off_target_file)
+                                                                        selected_features=selected_features,
+                                                                        off_target_output_file=off_target_file)
         targets_df = valid_targets_df
         print(f"✅ Specificity results saved to {output_file}_specificity.csv")
 
@@ -965,66 +1008,75 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
 
     return targets_df, off_target_info
 
-
-def filter_probes_by_specificity(targets_df, specificity_results, off_target_output_file=None):
+def filter_probes_by_specificity(targets_df, specificity_results, selected_features, off_target_output_file=None):
     """
-    Filter candidate probes by verifying that all observed specificity results match the expected transcript IDs.
-    
+    Filter candidate probes by verifying that all observed specificity results belong to the expected transcripts
+    for the gene (using the union of transcript IDs from selected_features).
+
     Args:
         targets_df (DataFrame): DataFrame with candidate probes. Expected to have:
-            - 'Probe_id'
+            - 'Probe_id' (format: "Gene|chr:start-end")
             - 'Transcript_id' (semicolon-separated string)
         specificity_results (DataFrame): DataFrame with specificity results. Expected to have:
-            - 'query_name'
-            - 'target_name'
+            - 'query_name' (probe id)
+            - 'target_name' (transcript id)
+        selected_features (DataFrame): DataFrame with selected features. Expected to have:
+            - 'gene_name'
+            - 'transcript_id' (semicolon-separated string)
         off_target_output_file (str, optional): Path to save off-target probe information.
         
     Returns:
-        tuple: (DataFrame of valid probes reassembled to one row per probe, list of off-target details)
+        tuple: (DataFrame of valid probes, list of off-target details)
     """
-    # Expand targets_df by splitting Transcript_id on ';'
-    targets_expanded = targets_df.assign(
-        Transcript_id=targets_df['Transcript_id'].str.split(';')
-    ).explode('Transcript_id')
-    
-    # Create composite key for expected mappings
-    targets_expanded['probe_id_transcript_id'] = targets_expanded['Probe_id'] + '_' + targets_expanded['Transcript_id']
-    
-    # Create composite key in specificity results
-    specificity_results['probe_id_transcript_id'] = specificity_results['query_name'] + '_' + specificity_results['target_name']
-    
-    valid_probes = []
-    off_target_details = []  # To capture details of off-target probes
-    
-    # Evaluate each probe's specificity
-    for probe_id, group in targets_expanded.groupby('Probe_id'):
-        expected = set(group['probe_id_transcript_id'])
-        observed = set(specificity_results.loc[specificity_results['query_name'] == probe_id, 'probe_id_transcript_id'])
-        
-        if observed.issubset(expected):
-            valid_probes.append(probe_id)
+    # Build gene-to-transcripts mapping from selected_features
+    gene_to_transcripts = {}
+    for _, row in selected_features.iterrows():
+        gene = row['gene_name']
+        transcripts = set(row['transcript_id'].split(';'))
+        if gene in gene_to_transcripts:
+            gene_to_transcripts[gene] = gene_to_transcripts[gene].union(transcripts)
         else:
-            off_target_details.append({
-                'Probe_id': probe_id,
-                'Expected': expected,
-                'Observed': observed,
-                'Off_targets': observed - expected
-            })
-    
-    # Filter to keep only valid probes
-    valid_targets = targets_expanded[targets_expanded['Probe_id'].isin(valid_probes)]
-    
-    # Reassemble transcript IDs into a semicolon-separated string per probe
-    valid_targets_df = valid_targets.groupby(
-        ['Probe_id', 'Gene', 'Region', 'Sequence', 'GC', 'Coverage'], as_index=False
-    ).agg({'Transcript_id': ';'.join})
-    
-    # Optionally save off-target details to a CSV file
+            gene_to_transcripts[gene] = transcripts
+
+    valid_probes = []
+    off_target_details = []
+    off_target_df = None
+
+    for probe_id in targets_df['Probe_id'].unique():
+            # Assume probe_id format is "Gene|chr:start-end"
+            gene = probe_id.split('|')[0]
+            expected_transcripts = gene_to_transcripts.get(gene, set())
+            
+            # Get observed transcript IDs from specificity_results for this probe
+            observed_transcripts = set(specificity_results.loc[specificity_results['query_name'] == probe_id, 'target_name'].unique())
+            
+            # Check: if all observed transcripts are among expected transcripts for the gene, the probe is valid.
+            if observed_transcripts.issubset(expected_transcripts):
+                valid_probes.append(probe_id)
+            else:
+                print("matched: ", observed_transcripts & expected_transcripts)
+                print(probe_id, gene, expected_transcripts, observed_transcripts)
+                off_target_details.append({
+                    'Probe_id': probe_id,
+                    'Gene': gene,
+                    'Sequence': targets_df.loc[targets_df['Probe_id'] == probe_id, 'Sequence'].values[0],
+                    'Expected_transcripts': expected_transcripts,
+                    'Observed_transcripts': observed_transcripts,
+                    'Off_targets': observed_transcripts - expected_transcripts
+                })
+        
+    # Filter targets_df to only include valid probes
+    valid_targets_df = targets_df[targets_df['Probe_id'].isin(valid_probes)]
+
+    # Optionally, save off-target details to a CSV file
     if off_target_output_file and off_target_details:
         off_target_df = pd.DataFrame(off_target_details)
         off_target_df.to_csv(off_target_output_file, index=False)
         print(f"Off-target probe details saved to {off_target_output_file}")
-    
+    else:
+        off_target_df = None
+
+    # Return the valid probes and the off-target details list (even if empty)
     return valid_targets_df, off_target_df
 
 def parse_specificity_results(specificity_results):
