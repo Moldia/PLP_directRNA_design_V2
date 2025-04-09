@@ -42,7 +42,7 @@ _This step can be parallelized together with `extract_features.py` and the outpu
 `python3 codes/extract_sequences.py --fasta data/Mus.fa --output_fasta extract_seqs_output.fa --identifier_type gene_name --plp_length 30 --gtf_output extract_features_output.txt`
 
 ## Find targets
-`python3 codes/find_target.py --selected_features extract_features_output.txt --fasta_file extract_seqs_output.fa --output_file targets.txt --iupac_mismatches "5:R,10:G" --reference_fasta data/transcriptome_out.fa --max_errors 4 --Tm_min 58 --Tm_max 62 --lowest_percentile_Tm_score_cutoff 5 --min_dist_probes 8 --filter_ligation_junction`
+`python3 codes/find_target.py --selected_features extract_features_output.txt --fasta_file extract_seqs_output.fa --output_file targets.txt --iupac_mismatches "5:R,10:G" --reference_fasta data/transcriptome_out.fa --max_errors 4 --Tm_min 58 --Tm_max 62 --lowest_percentile_Tm_score_cutoff 5 --min_dist_probes 8 --check_specificity --filter_ligation_junction`
 
 
 ## Run whole workflow  
@@ -72,6 +72,7 @@ python3 codes/run_probe_design.py \
 --find_target_lowest_percentile_Tm_score_cutoff 5 \
 --find_target_min_dist_probes 8 \
 --find_target_filter_ligation_junction \
+--find_target_specificity_check \
 --find_target_num_probes 15
 ```
 
