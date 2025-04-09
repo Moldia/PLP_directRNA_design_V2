@@ -6,7 +6,7 @@ import argparse
 def main(gtf_file, output_file, genes_str=None, identifier_type='gene_id', gene_feature='CDS'):
  
     # Parse the GTF file and filter by gene list
-    gtf_df, genes_of_interest = plp.parse_gtf(gtf_file, genes_str, identifier_type, gene_feature)
+    gtf_df, genes_of_interest = plp.parse_gtf(gtf_file, genes_str, identifier_type)
 
     # Merge regions and calculate coverage
     merged_cov_df = plp.merge_regions_and_coverage(genes_of_interest, gtf_df)
