@@ -969,7 +969,7 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
 
             if not (gc_min <= gc_content <= gc_max):
                 continue
-            if not any(nucleotide * 3 in tmp_seq for nucleotide in "ACGT"):
+            if re.search(r'(A{3,}|C{3,}|G{3,}|T{3,})', str(tmp_seq)):
                 continue
 
             start = initial_start + i
