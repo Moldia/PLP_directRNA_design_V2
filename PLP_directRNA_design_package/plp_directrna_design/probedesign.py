@@ -1054,8 +1054,6 @@ def filter_probes_by_specificity(targets_df, specificity_results, selected_featu
             if observed_transcripts.issubset(expected_transcripts):
                 valid_probes.append(probe_id)
             else:
-                print("matched: ", observed_transcripts & expected_transcripts)
-                print(probe_id, gene, expected_transcripts, observed_transcripts)
                 off_target_details.append({
                     'Probe_id': probe_id,
                     'Gene': gene,
