@@ -245,7 +245,7 @@ def parse_gtf_to_dataframe(gtf_path: str) -> pd.DataFrame:
     
     return df
 
-def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id'):
+def parse_gtf(gtf_file, genes_of_interest=None, identifier_type='gene_id'):
     """
     Parses a GTF file and yields data only for the specified genes_of_interest.
 
@@ -262,13 +262,7 @@ def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id'):
     # Read the GTF file into a DataFrame
     gtf_df = parse_gtf_to_dataframe(gtf_file)
 
-    # Convert gene names to lowercase for case-insensitive matching
-    if genes_str:
-            genes_of_interest = set([g.strip().lower() for g in genes_str.split(",")])
-            print(f"Processing genes: {', '.join(genes_of_interest)}")
-    else:
-        genes_of_interest = None
-        raise InputValueError("No gene list provided. Processing all genes. $genes_of_interest", field="genes_of_interest", code="no_gene_list_provided")
+    print(f"Processing genes: {', '.join(genes_of_interest)}")
 
     # Check if a gene list is provided and filter accordingly
     
@@ -285,7 +279,7 @@ def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id'):
     if len(gtf_df) == 0:
         raise InputValueError("No matching genes found in the GTF file. This can be due to either incomplete gtf file or errors in gene identifications.", field="genes_of_interest", code="no_matching_genes_found")
 
-    return gtf_df, genes_of_interest
+    return gtf_df
 
 def parse_gtf_with_gene_feature(gtf_file, genes_str=None, identifier_type='gene_id', gene_feature='CDS'):
     """
