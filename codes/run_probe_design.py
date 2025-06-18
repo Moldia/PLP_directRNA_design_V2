@@ -46,7 +46,8 @@ def run_find_targets(args):
         "--Tm_max", str(args.find_target_Tm_max),
         "--lowest_percentile_Tm_score_cutoff", str(args.find_target_lowest_percentile_Tm_score_cutoff),
         "--min_dist_probes", str(args.find_target_min_dist_probes),
-        "--num_probes", args.find_target_num_probes
+        "--num_probes", args.find_target_num_probes,
+        "--check_specificity", args.find_target_check_specificity
     ]
     if args.find_target_off_target_output:
         cmd.append("--off_target_output")
@@ -94,6 +95,7 @@ if __name__ == "__main__":
     parser.add_argument("--find_target_filter_ligation_junction", action="store_true", help="Include this flag to filter ligation junction for find_target.py")
     parser.add_argument("--find_target_num_probes", default="10", help="Number of probes to select for find_target.py")
     parser.add_argument("--find_target_off_target_output", action="store_true", help="Include this flag to output off-target information for find_target.py")
+    parser.add_argument("--find_target_check_specificity", action="store_true", default = True,  help="Include this flag to check probe specificity for find_target.py")
 
     args = parser.parse_args()
 
