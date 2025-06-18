@@ -87,6 +87,10 @@ parser.add_argument("--off_target_output", action="store_true", help="Output off
 
 args = parser.parse_args()
 
+if args.iupac_mismatches == "None":
+    args.iupac_mismatches = None
+
+
 main(args.selected_features, args.fasta_file, args.output_file, args.reference_fasta, 
      args.min_coverage, args.gc_min, args.gc_max, args.num_probes, 
      args.iupac_mismatches, args.max_errors, args.check_specificity, args.plp_length)
