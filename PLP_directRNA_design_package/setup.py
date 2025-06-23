@@ -7,7 +7,11 @@ setup(
     install_requires=[
         'pandas',
         'numpy',
-        'biopython'
+        'biopython',
+        'tqdm', 
+        'matplotlib',
+        'dnaio',
+        'cutadapt'
     ],
     entry_points={
         "console_scripts": [

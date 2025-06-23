@@ -16,7 +16,11 @@ authors = [
 dependencies = [
     "pandas",
     "numpy",
-    "biopython"
+    "biopython",
+    "tqdm", 
+    "matplotlib", 
+    "dnaio",
+     "cutadapt"
 ]
 
 [project.scripts]
