@@ -11,7 +11,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "extract_features=PLP_directRNA_design.extract_features:main",
+            "extract_features=plp_directrna_design.extract_features:main",
         ],
     },
     author='Nima Rafati, Marco Grillo, Victoria Muiliadi, Maria Escriva Conde, and Sergio Marco Salas',
