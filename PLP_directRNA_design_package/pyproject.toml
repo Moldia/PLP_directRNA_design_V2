@@ -11,6 +11,7 @@ authors = [
     { name = "Marco Grillo" },
     { name = "Victoria Muiliadi" },
     { name = "Maria Escriva Conde" },
+    { name = "Marcel Martin"}, 
     { name = "Sergio Marco Salas" }
 ]
 dependencies = [

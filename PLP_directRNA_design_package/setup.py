@@ -18,6 +18,6 @@ setup(
             "extract_features=plp_directrna_design.extract_features:main",
         ],
     },
-    author='Nima Rafati, Marco Grillo, Victoria Muiliadi, Maria Escriva Conde, and Sergio Marco Salas',
+    author='Nima Rafati, Marco Grillo, Victoria Muiliadi, Maria Escriva Conde, Marcel Martin, and Sergio Marco Salas',
     description='A package for designing probes for direct RNA sequencing.'
 )
