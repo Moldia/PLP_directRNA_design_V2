@@ -1,5 +1,5 @@
-# Use Ubuntu 20.04 as base image
-FROM ubuntu:20.04
+# Use Python 3.9 as base image (built on Debian)
+FROM python:3.9-slim
 
 # Set non-interactive mode for apt
 ENV DEBIAN_FRONTEND=noninteractive
@@ -15,10 +15,7 @@ RUN apt-get update && apt-get install -y \
     make \
     gcc \
     g++ \
-    python3 \
-    python3-pip \
     build-essential \
-    software-properties-common \
     automake \
     autoconf \
     perl \
@@ -34,6 +31,9 @@ RUN apt-get update && apt-get install -y \
     bedtools \
     && apt-get clean
 
+# Verify Python version (should be 3.9.x)
+RUN python3 --version && pip3 --version
+
 # Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
@@ -41,8 +41,8 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy and install local Python package
 COPY PLP_directRNA_design_package /app/PLP_directRNA_design_package
 WORKDIR /app/PLP_directRNA_design_package
-RUN pip3 install .
-WORKDIR /app  
+RUN pip3 install --editable .
+WORKDIR /app
 
 # Download, build, and install samtools from source
 RUN wget https://github.com/samtools/samtools/releases/download/1.21/samtools-1.21.tar.bz2 \
