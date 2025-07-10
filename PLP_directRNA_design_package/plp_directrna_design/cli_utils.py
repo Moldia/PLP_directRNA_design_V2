@@ -109,6 +109,9 @@ def extract_features(
     # Parse the GTF file and filter by gene list
     gtf_df = plp.parse_gtf(gtf_file, genes, identifier_type)
 
+    print(f"🔹 Extracted {len(gtf_df)} features from GTF file."
+          f" Feature type: {gene_feature}")
+    
     # Merge regions and calculate coverage
     merged_cov_df = plp.merge_regions_and_coverage(genes, gtf_df)
 
@@ -174,6 +177,39 @@ def extract_sequences(
 
 
 # Argument parsers
+
+def master_parser():
+    parser = argparse.ArgumentParser(
+        description="Run the complete PLP probe design workflow"
+    )
+
+    # Shared and individual inputs
+    parser.add_argument("--gtf", required=True)
+    parser.add_argument("--genes", required=True)
+    parser.add_argument("--identifier_type", default="gene_name")
+    parser.add_argument("--gene_feature", default="CDS")
+    parser.add_argument("--fasta", required=True)
+
+    # Outputs
+    parser.add_argument("--features_output", default="extract_features_output.txt")
+    parser.add_argument("--transcriptome_output", default="data/transcriptome_out.fa")
+    parser.add_argument("--sequences_output", default="extract_seqs_output.fa")
+    parser.add_argument("--targets_output", default="targets.txt")
+
+    # Find targets specific args
+    parser.add_argument("--min_coverage", type=int, default=1)
+    parser.add_argument("--gc_min", type=int, default=50)
+    parser.add_argument("--gc_max", type=int, default=65)
+    parser.add_argument("--num_probes", type=int, default=10)
+    parser.add_argument("--iupac_mismatches", default=None)
+    parser.add_argument("--max_errors", type=int, default=1)
+    parser.add_argument("--check_specificity", action="store_true")
+    parser.add_argument("--plp_length", type=int, default=30)
+
+    return parser
+
+
+
 def extract_features_parser():
     parser = argparse.ArgumentParser(
         description="Parse GTF file and calculate coverage"
@@ -334,10 +370,11 @@ def extract_sequences_parser():
 
 # Input parsers
 def parse_genes(genes_str: str):
-    selected_genes = frozenset([g.strip().lower() for g in genes_str.split(",")])
-    unknown_genes = selected_genes - full_gene_set
-    if len(unknown_genes) > 0:
-        raise ValueError(f"Gene list contains unknown elements: {unknown_genes}")
+    print(f"Parsing genes: {genes_str}")
+    selected_genes = set([g.strip().lower() for g in genes_str.split(",")])
+#    unknown_genes = selected_genes - full_gene_set
+    # if len(unknown_genes) > 0:
+    #     raise ValueError(f"Gene list contains unknown elements: {unknown_genes}")
     return selected_genes
 
 
