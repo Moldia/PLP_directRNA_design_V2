@@ -251,7 +251,7 @@ def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id'):
 
         Args:
         gtf_file (str): Path to the GTF file.
-        genes_str (str or None): Comma-separated string of gene names. If None, raises error.
+        genes_str (str, set, or None): Gene names as string, set, or None.
         identifier_type (str): Type of identifier provided ('gene_id' or 'gene_name').
 
 
@@ -264,8 +264,12 @@ def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id'):
 
     # Convert gene names to lowercase for case-insensitive matching
     if genes_str:
-            genes_of_interest = set([g.strip().lower() for g in genes_str.split(",")])
-            print(f"Processing genes: {', '.join(genes_of_interest)}")
+            if isinstance(genes_str, str):
+                genes_of_interest = set([g.strip().lower() for g in genes_str.split(",")])
+            elif isinstance(genes_str, set):
+                genes_of_interest = genes_str  # Already processed by parse_genes()
+            else:
+                genes_of_interest = set(genes_str)  # Handle list/tuple
     else:
         genes_of_interest = None
         raise InputValueError("No gene list provided. $genes_of_interest", field="genes_of_interest", code="no_gene_list_provided")
@@ -340,7 +344,11 @@ def merge_regions_and_coverage(genes_of_interest, gtf_df):
     Returns:
         pd.DataFrame: A DataFrame containing merged CDS regions and average coverage.
     """
+    if isinstance(genes_of_interest, str):
+        genes_of_interest = {gene.strip() for gene in genes_of_interest.split(',')}
     print('Merge regions and calculating coverage....')
+    print(f"Processing genes: {genes_of_interest}")
+    
     # Initialize an empty list to store results
     merged_regions = []
 
