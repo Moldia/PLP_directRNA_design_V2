@@ -359,6 +359,11 @@ def merge_regions_and_coverage(genes_of_interest, gtf_df):
         # Sort by chromosome, strand, and start position
         isoforms = isoforms.sort_values(by=['seqname', 'strand', 'start'])
 
+        # Skip if there are no isoforms
+        if isoforms.empty:
+            print(f"No isoforms found for gene: {gn}")
+            continue
+
         # Determine the full genomic range
         min_start = isoforms['start'].min()
         max_end = isoforms['end'].max()
