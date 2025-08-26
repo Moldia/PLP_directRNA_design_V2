@@ -10,23 +10,23 @@ logger = logging.getLogger(__name__)
 # Commands
 def find_target(
     selected_features,
-    fasta_file,
+    sequences_output,
     output_file,
     reference_fasta,
     min_coverage,
-    gc_min=50,
-    gc_max=65,
-    num_probes=10,
-    iupac_mismatches=None,
-    max_errors=1,
-    check_specificity=False,
-    plp_length=30,
-    Tm_min=55,
-    Tm_max=65,
-    lowest_percentile_Tm_score_cutoff=5,
-    min_dist_probes=10,
-    filter_ligation_junction=True,
-    off_target_output=False,
+    gc_min,
+    gc_max,
+    num_probes,
+    iupac_mismatches,
+    max_errors,
+    check_specificity,
+    plp_length,
+    Tm_min,
+    Tm_max,
+    lowest_percentile_Tm_score_cutoff,
+    min_dist_probes,
+    filter_ligation_junction,
+    off_target_output,
 ):
     """
     Main function for probe extraction.
@@ -39,7 +39,7 @@ def find_target(
         )
         targets_df, off_target_info = plp.find_targets(
             selected_features=selected_features,
-            fasta_file=fasta_file,
+            sequences_output=sequences_output,
             reference_fasta=reference_fasta,
             plp_length=plp_length,
             min_coverage=min_coverage,
@@ -59,7 +59,7 @@ def find_target(
     else:
         targets_df, off_target_info = plp.find_targets(
             selected_features=selected_features,
-            fasta_file=fasta_file,
+            sequences_output=sequences_output,
             reference_fasta=reference_fasta,
             plp_length=plp_length,
             min_coverage=min_coverage,
@@ -275,7 +275,7 @@ def find_target_parser():
         help="Path to the selected features file (TSV format)",
     )
     parser.add_argument(
-        "--fasta_file",
+        "--sequences_output",
         required=True,
         help="Path to the extracted sequences file (CDS/exons)",
     )
