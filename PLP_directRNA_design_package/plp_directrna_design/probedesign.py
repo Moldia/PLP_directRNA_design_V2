@@ -364,6 +364,7 @@ def merge_regions_and_coverage(genes_of_interest, gtf_df):
             print(f"No isoforms found for gene: {gn}")
             continue
 
+
         # Determine the full genomic range
         min_start = isoforms['start'].min()
         max_end = isoforms['end'].max()
@@ -831,6 +832,9 @@ from cutadapt.adapters import BackAdapter
 from dataclasses import dataclass
 from io import StringIO
 import csv
+from cutadapt.adapters import Matchable, SingleAdapter, RemoveBeforeMatch, RemoveAfterMatch, PrefixAdapter, SuffixAdapter
+from cutadapt.align import edit_environment, hamming_sphere
+from .adapterindex import AdapterIndex
 
 @dataclass
 class Alignment:
@@ -841,6 +845,23 @@ class Alignment:
     mismatches: int
     query_sequence: str
     target_sequence: str
+
+def find_all(index, ref, ref_id):
+    k = index._length
+    for start in range(0, len(ref) - k + 1):
+        s = ref[start:start + k]
+        match = index.match_to(s)
+        if (match := index.match_to(s)) is not None:
+            end = start + k
+            yield Alignment(
+                query_name=match.adapter.name,
+                target_name=ref_id,
+                target_start=match.rstart,
+                target_end=match.rstop,
+                mismatches=match.errors,
+                query_sequence=match.adapter.sequence,
+                target_sequence=s,
+            )
 
 def find_probes_in_targets(targets_df, reference_fasta, max_errors=1, output_file=None):
     """
@@ -858,51 +879,43 @@ def find_probes_in_targets(targets_df, reference_fasta, max_errors=1, output_fil
     """
     results = []
 
+# Creating index here
+    adapters = []
+    for _, row in targets_df.iterrows():
+        probe_id = row["Probe_id"]
+        probe_seq = row["Sequence"]
+        adapters.append(
+            PrefixAdapter(probe_seq, name=probe_id, max_errors=max_errors, indels=False)
+        )
+        # Create reverse-complemented versions of the primers
+        adapters.append(
+            PrefixAdapter(str(Seq(probe_seq).reverse_complement()), name=f"{probe_id} revcomp", max_errors=max_errors, indels=False)
+        )
+
+    index = AdapterIndex(adapters, prefix=True, keep_ambiguous=True)
+
+
     with dnaio.open(reference_fasta) as references:
         references = list(references)  # Load references into a list
-        total_probes = len(targets_df)  # Get total probe count
+    total_probes = len(targets_df)  # Get total probe count
 
-        with tqdm(total=total_probes, desc="Testing probes for specificity", unit=" alignments") as pbar:
-            for reference_record in references:
-                ref_id = reference_record.id
-                ref_seq = reference_record.sequence
+    #with tqdm(total=total_probes, desc="Testing probes for specificity", unit=" alignments") as pbar:
+    for reference_record in tqdm(references, desc="Testing probes for specificity", unit=" alignments"):    
+        ref_id = reference_record.id
+        ref_seq = reference_record.sequence
 
-                for _, row in targets_df.iterrows():
-                    probe_id = row["Probe_id"]
-                    probe_seq = row["Sequence"]
+#        for _, row in targets_df.iterrows():
+#            probe_id = row["Probe_id"]
+#            probe_seq = row["Sequence"]#
 
-                    adapter = BackAdapter(probe_seq, max_errors=max_errors, min_overlap=len(probe_seq), indels=False)
-                    aligner = adapter.aligner
+#            adapter = BackAdapter(probe_seq, max_errors=max_errors, min_overlap=len(probe_seq), indels=False)
+#            aligner = adapter.aligner
 
-                    # Forward strand search
-                    for t_start, t_end, errors, target_seq in find_all(ref_seq, aligner):
-                        results.append(Alignment(
-                            query_name=probe_id,
-                            target_name=ref_id,
-                            target_start=t_start + 1,  # Convert to 1-based index
-                            target_end=t_end,
-                            mismatches=errors,
-                            query_sequence=probe_seq,
-                            target_sequence=target_seq
-                        ))
-                    pbar.update(1)  # Update progress bar
+            # Forward strand search
+            #start, end, match.score, match.errors, match.adapter
+        for alignment in find_all(index, ref_seq, ref_id):
+            results.append(alignment) 
 
-                    # Reverse complement search
-                    rev_ref_seq = str(Seq(ref_seq).reverse_complement())
-                    adapter = BackAdapter(probe_seq, max_errors=max_errors, min_overlap=len(probe_seq), indels=False)
-                    aligner = adapter.aligner
-
-                    for t_start, t_end, errors, target_seq in find_all(rev_ref_seq, aligner):
-                        results.append(Alignment(
-                            query_name=probe_id,
-                            target_name=f"{ref_id}(reverse)",
-                            target_start=t_start + 1,
-                            target_end=t_end,
-                            mismatches=errors,
-                            query_sequence=probe_seq,
-                            target_sequence=target_seq
-                        ))
-                    pbar.update(1)  # Update progress bar again for reverse search
 
     # Convert results to DataFrame
     results_df = pd.DataFrame(results)
@@ -915,22 +928,7 @@ def find_probes_in_targets(targets_df, reference_fasta, max_errors=1, output_fil
     return results_df
 
 
-def find_all(ref, aligner):
-    """Find all occurrences of a probe in a reference sequence."""
-    offset = 0
-    while True:
-        result = aligner.locate(ref)
-        if result is None:
-            break
-        ref_start, ref_end, query_start, query_end, score, errors = result
-        t_start = query_start + offset
-        t_end = query_end + offset
-        target_seq = ref[query_start:query_end]
-        yield (t_start, t_end, errors, target_seq)
-        offset += query_start + 1
-        ref = ref[query_start + 1:]
-
-def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, min_coverage=1,
+def find_targets(selected_features, sequences_output, reference_fasta, plp_length=30, min_coverage=1,
                  output_file='Candidate_probes', gc_min=50, gc_max=65, num_probes=10,
                  iupac_mismatches=None, max_errors=1, check_specificity=False, off_target_output=False):
     """
@@ -958,7 +956,7 @@ def find_targets(selected_features, fasta_file, reference_fasta, plp_length=30, 
     targets = []
 
     # Read the FASTA file and selected features
-    seq_dict = SeqIO.to_dict(SeqIO.parse(fasta_file, "fasta"))
+    seq_dict = SeqIO.to_dict(SeqIO.parse(sequences_output, "fasta"))
     selected_features = pd.read_csv(selected_features, sep='\t')
     selected_features.index = selected_features['region']
     coverage_dict = dict(zip(selected_features['region'], selected_features['coverage']))
