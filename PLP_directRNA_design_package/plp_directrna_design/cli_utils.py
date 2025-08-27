@@ -109,13 +109,15 @@ def extract_features(
     # Parse the GTF file and filter by gene list
     gtf_df = plp.parse_gtf(gtf_file, genes, identifier_type)
 
-    print(f"🔹 Extracted {len(gtf_df)} features from GTF file."
-          f" Feature type: {gene_feature}")
-    
+    logger.info(
+        f"🔹 Extracted {len(gtf_df)} features from GTF file."
+        f" Feature type: {gene_feature}"
+    )
+
     # Merge regions and calculate coverage
     merged_cov_df = plp.merge_regions_and_coverage(genes, gtf_df)
 
-    if not output_file is None:
+    if output_file is not None:
         # Write the merged results to an output file
         merged_cov_df.to_csv(output_file, sep="\t", index=False)
 
@@ -176,38 +178,110 @@ def extract_sequences(
     plp.extract_sequences(fasta_file, regions_file + ".txt", output_fasta, df)
 
 
-# Argument parsers
-
-def master_parser():
-    parser = argparse.ArgumentParser(
-        description="Run the complete PLP probe design workflow"
+def run_plp_directrna(
+    gtf: str,
+    features_output: Optional[str],
+    genes: Optional[set[str]],
+    identifier_type: Literal["gene_id", "gene_name"],
+    gene_feature: str,
+    fasta: str,
+    transcriptome_output: str,
+    sequences_output: str,
+    plp_length: int,
+    targets_output: str,
+    min_coverage: int,
+    gc_min: int,
+    gc_max: int,
+    num_probes: int,
+    iupac_mismatches: str,
+    max_errors: int,
+    check_specificity: bool,
+    Tm_min: int,
+    Tm_max: int,
+    lowest_percentile_Tm_score_cutoff: int,
+    min_dist_probes: int,
+    filter_ligation_junction: bool,
+    off_target_output: bool,
+):
+    # Step 1: Extract features
+    logger.info("EXTRACTING FEATURES")
+    extract_features(
+        gtf, features_output, genes, identifier_type, gene_feature,
     )
 
+    # Step 2: Extract mRNA
+    logger.info("EXTRACTING mRNA")
+    extract_mrna(fasta, gtf, transcriptome_output)
+
+    # Step 3: Extract sequences
+    logger.info("EXTRACTING SEQUENCES")
+    extract_sequences(
+        features_output,
+        fasta,
+        sequences_output,
+        plp_length,
+        identifier_type,
+    )
+
+    # Step 4: Find targets
+    logger.info("FINDING TARGETS")
+    find_target(
+        selected_features=features_output,
+        sequences_output=sequences_output,
+        output_file=targets_output,              # ← probes table
+        reference_fasta=sequences_output,        # ← transcriptome sequences
+        min_coverage=min_coverage,
+        gc_min=gc_min,
+        gc_max=gc_max,
+        num_probes=num_probes,
+        iupac_mismatches=iupac_mismatches,
+        max_errors=max_errors,
+        check_specificity=check_specificity,
+        plp_length=plp_length,
+        Tm_min=Tm_min,
+        Tm_max=Tm_max,
+        lowest_percentile_Tm_score_cutoff=lowest_percentile_Tm_score_cutoff,
+        min_dist_probes=min_dist_probes,
+        filter_ligation_junction=filter_ligation_junction,
+        off_target_output=off_target_output
+    )
+
+
+# Argument parsers
+
+def run_plp_directrna_parser():
+    parser = argparse.ArgumentParser(description="PLP DirectRNA Design Workflow")
+
     # Shared and individual inputs
-    parser.add_argument("--gtf", required=True)
-    parser.add_argument("--genes", required=True)
-    parser.add_argument("--identifier_type", default="gene_name")
-    parser.add_argument("--gene_feature", default="CDS")
-    parser.add_argument("--fasta", required=True)
+    parser.add_argument("--gtf", required=True, help="Path to the GTF file")
+    parser.add_argument("--genes", type=parse_genes, required=True, help="Comma-separated list of gene IDs or names to filter")
+    parser.add_argument("--identifier_type", default="gene_name", choices=["gene_id", "gene_name"], help="Type of identifier provided")
+    parser.add_argument("--gene_feature", default="CDS", help="Feature type to extract")
+    parser.add_argument("--fasta", required=True, help="Path to the FASTA file")
 
     # Outputs
-    parser.add_argument("--features_output", default="extract_features_output.txt")
-    parser.add_argument("--transcriptome_output", default="data/transcriptome_out.fa")
-    parser.add_argument("--sequences_output", default="extract_seqs_output.fa")
-    parser.add_argument("--targets_output", default="targets.txt")
+    parser.add_argument("--features_output", default="extract_features_output.txt", help="Path to features output file")
+    parser.add_argument("--transcriptome_output", default="data/transcriptome_out.fa", help="Path to transcriptome output file")
+    parser.add_argument("--sequences_output", default="extract_seqs_output.fa", help="Path to extracted sequences output file (transcriptome)")
+    parser.add_argument("--targets_output", default="targets.txt", help="Path to final probes sequences table output file")
 
     # Find targets specific args
-    parser.add_argument("--min_coverage", type=int, default=1)
-    parser.add_argument("--gc_min", type=int, default=50)
-    parser.add_argument("--gc_max", type=int, default=65)
-    parser.add_argument("--num_probes", type=int, default=10)
-    parser.add_argument("--iupac_mismatches", default=None)
-    parser.add_argument("--max_errors", type=int, default=1)
-    parser.add_argument("--check_specificity", action="store_true")
-    parser.add_argument("--plp_length", type=int, default=30)
+    parser.add_argument("--min_coverage", type=int, default=1, help="Minimum coverage threshold")
+    parser.add_argument("--gc_min", type=int, default=50, help="Minimum GC content percentage")
+    parser.add_argument("--gc_max", type=int, default=65, help="Maximum GC content percentage")
+    parser.add_argument("--num_probes", type=int, default=10, help="Number of probes to generate")
+    parser.add_argument("--iupac_mismatches", default=None, help="IUPAC mismatches parameter")
+    parser.add_argument("--max_errors", type=int, default=1, help="Maximum number of errors allowed")
+    parser.add_argument("--check_specificity", action="store_true", help="Enable specificity checking")
+    parser.add_argument("--plp_length", type=int, default=30, help="PLP length for probe design")
+    parser.add_argument("--off_target_output", action="store_true", help="Enable saving of off-target output")
+    parser.add_argument("--Tm_min", type=int, default=50, help="Minimum Tm for probes")
+    parser.add_argument("--Tm_max", type=int, default=70, help="Maximum Tm for probes")
+    parser.add_argument("--lowest_percentile_Tm_score_cutoff", type=int, default=10, help="Lowest percentile Tm score cutoff")
+    parser.add_argument("--min_dist_probes", type=int, default=100, help="Minimum distance between probes")
+    parser.add_argument("--filter_ligation_junction", action="store_true", help="Enable filtering of ligation junctions")
 
     return parser
-
 
 
 def extract_features_parser():
@@ -295,6 +369,7 @@ def find_target_parser():
     )
     parser.add_argument(
         "--iupac_mismatches",
+        type=parse_iupac_mismatches,
         default=None,
         help="IUPAC mismatches to consider. Note that the number of mismatches should be less than or equal to 2. Example: 5:R,6:A",
     )
@@ -369,8 +444,14 @@ def extract_sequences_parser():
 
 
 # Input parsers
+def parse_iupac_mismatches(iupac_mismatches_str: str):
+    if iupac_mismatches_str == "None":
+        return None
+    return iupac_mismatches_str
+
+
 def parse_genes(genes_str: str):
-    print(f"Parsing genes: {genes_str}")
+    logger.info(f"Parsing genes: {genes_str}")
     selected_genes = set([g.strip().lower() for g in genes_str.split(",")])
 #    unknown_genes = selected_genes - full_gene_set
     # if len(unknown_genes) > 0:
