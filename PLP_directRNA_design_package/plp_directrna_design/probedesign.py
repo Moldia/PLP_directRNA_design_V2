@@ -245,92 +245,42 @@ def parse_gtf_to_dataframe(gtf_path: str) -> pd.DataFrame:
     
     return df
 
-def parse_gtf(gtf_file, genes_str=None, identifier_type='gene_id'):
+
+def parse_gtf(gtf_file, genes_of_interest, identifier_type='gene_id', gene_features=None):
     """
     Parses a GTF file and yields data only for the specified genes_of_interest.
 
         Args:
         gtf_file (str): Path to the GTF file.
-        genes_str (str, set, or None): Gene names as string, set, or None.
+        genes_of_interest (list[str] or set[str]): Gene names as set of strings.
         identifier_type (str): Type of identifier provided ('gene_id' or 'gene_name').
-
+        gene_features: (set[Literal['CDS', 'exon']] or None): Selected features defaults to {"CDS", "exon"}
 
     Returns:
         pd.DataFrame: A DataFrame containing parsed GTF data.
     """
+    gene_features = (
+        {"CDS", "exon"}
+        if gene_features is None
+        else gene_features
+    )
+    valid_gene_identifier_types = {"gene_id", "gene_name"}
+    if identifier_type not in valid_gene_identifier_types:
+        raise InputValueError("Gene identifier type must be 'gene_id' or 'gene_name'", field="identifier_type", code="incorrect_identifier_type_provided")
+
+    if isinstance(genes_of_interest, list) or isinstance(genes_of_interest, set):
+        genes_of_interest = {gi.lower() for gi in genes_of_interest}
+    else:
+        raise InputValueError("Genes of interest is not a list or set", field="genes_of_interest", code="bad_gene_list_provided")
+
     print('Parsing GTF file....')
     # Read the GTF file into a DataFrame
     gtf_df = parse_gtf_to_dataframe(gtf_file)
 
-    # Convert gene names to lowercase for case-insensitive matching
-    if genes_str:
-            if isinstance(genes_str, str):
-                genes_of_interest = set([g.strip().lower() for g in genes_str.split(",")])
-            elif isinstance(genes_str, set):
-                genes_of_interest = genes_str  # Already processed by parse_genes()
-            else:
-                genes_of_interest = set(genes_str)  # Handle list/tuple
-    else:
-        genes_of_interest = None
-        raise InputValueError("No gene list provided. $genes_of_interest", field="genes_of_interest", code="no_gene_list_provided")
-
-    # Check if a gene list is provided and filter accordingly
-    
-    if genes_of_interest:
-        if identifier_type == 'gene_id':
-            gtf_df = gtf_df[gtf_df['gene_id'].str.lower().isin(genes_of_interest) & ((gtf_df['feature'] == 'CDS') | (gtf_df['feature'] == 'exon'))]
-        elif identifier_type == 'gene_name':
-            gtf_df = gtf_df[gtf_df['gene_name'].str.lower().isin(genes_of_interest) & ((gtf_df['feature'] == 'CDS') | (gtf_df['feature'] == 'exon'))]
-
-        else:
-            raise InputValueError("Gene identifier type must be 'gene_id' or 'gene_name'", field="identifier_type", code="no_identifier_type_provided")
-            
-
-    if len(gtf_df) == 0:
-        raise InputValueError("No matching genes found in the GTF file. This can be due to either incomplete gtf file or errors in gene identifications.", field="genes_of_interest", code="no_matching_genes_found")
+    # Filter list using the identifier type
+    gtf_df = gtf_df[gtf_df[identifier_type].str.lower().isin(genes_of_interest) & gtf_df['feature'].isin(gene_features)]
 
     return gtf_df
-
-def parse_gtf_with_gene_feature(gtf_file, genes_str=None, identifier_type='gene_id', gene_feature='CDS'):
-    """
-    Parses a GTF file and yields data only for the specified genes_of_interest.
-
-    Args:
-        gtf_file (str): Path to the GTF file.
-        genes_of_interest (set or None): A set of gene IDs or names to parse.
-                                         If None, parse all genes in the GTF.
-        identifier_type (str): Type of identifier provided ('gene_id' or 'gene_name').
-
-    Returns:
-        pd.DataFrame: A DataFrame containing parsed GTF data.
-    """
-    print('Parsing GTF file....')
-    # Read the GTF file into a DataFrame
-    gtf_df = parse_gtf_to_dataframe(gtf_file)
-
-    # Convert gene names to lowercase for case-insensitive matching
-    if genes_str:
-            genes_of_interest = set([g.strip().lower() for g in genes_str.split(",")])
-            print(f"Processing genes: {', '.join(genes_of_interest)}")
-    else:
-        genes_of_interest = None
-        raise InputValueError("No gene list provided. Processing all genes. $genes_of_interest", field="genes_of_interest", code="no_gene_list_provided")
-
-    # Check if a gene list is provided and filter accordingly
-    
-    if genes_of_interest:
-        if identifier_type == 'gene_id':
-            gtf_df = gtf_df[gtf_df['gene_id'].str.lower().isin(genes_of_interest) & (gtf_df['feature'] == gene_feature)]
-        elif identifier_type == 'gene_name':
-            gtf_df = gtf_df[gtf_df['gene_name'].str.lower().isin(genes_of_interest)& (gtf_df['feature'] == gene_feature)]
-        else:
-            raise InputValueError("Gene identifier type must be 'gene_id' or 'gene_name'", field="identifier_type", code="no_identifier_type_provided")
-            
-
-    if len(gtf_df) == 0:
-        raise InputValueError("No matching genes found in the GTF file. This can be due to either incomplete gtf file or errors in gene identifications.", field="genes_of_interest", code="no_matching_genes_found")
-
-    return gtf_df, genes_of_interest
 
 
 def merge_regions_and_coverage(genes_of_interest, gtf_df):

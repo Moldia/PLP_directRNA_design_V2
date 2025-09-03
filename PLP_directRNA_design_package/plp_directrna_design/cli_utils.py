@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 # Commands
-def find_target(
+def find_targets(
     selected_features,
     sequences_output,
     output_file,
@@ -104,14 +104,12 @@ def extract_features(
     output_file: Optional[str] = None,
     genes: Optional[set[str]] = None,
     identifier_type: Literal["gene_id", "gene_name"] = "gene_id",
-    gene_feature: str = "CDS",
 ):
     # Parse the GTF file and filter by gene list
     gtf_df = plp.parse_gtf(gtf_file, genes, identifier_type)
 
     logger.info(
         f"🔹 Extracted {len(gtf_df)} features from GTF file."
-        f" Feature type: {gene_feature}"
     )
 
     # Merge regions and calculate coverage
@@ -183,7 +181,6 @@ def run_plp_directrna(
     features_output: Optional[str],
     genes: Optional[set[str]],
     identifier_type: Literal["gene_id", "gene_name"],
-    gene_feature: str,
     fasta: str,
     transcriptome_output: str,
     sequences_output: str,
@@ -206,7 +203,7 @@ def run_plp_directrna(
     # Step 1: Extract features
     logger.info("EXTRACTING FEATURES")
     extract_features(
-        gtf, features_output, genes, identifier_type, gene_feature,
+        gtf, features_output, genes, identifier_type
     )
 
     # Step 2: Extract mRNA
@@ -225,7 +222,7 @@ def run_plp_directrna(
 
     # Step 4: Find targets
     logger.info("FINDING TARGETS")
-    find_target(
+    return find_targets(
         selected_features=features_output,
         sequences_output=sequences_output,
         output_file=targets_output,              # ← probes table
@@ -256,7 +253,6 @@ def run_plp_directrna_parser():
     parser.add_argument("--gtf", required=True, help="Path to the GTF file")
     parser.add_argument("--genes", type=parse_genes, required=True, help="Comma-separated list of gene IDs or names to filter")
     parser.add_argument("--identifier_type", default="gene_name", choices=["gene_id", "gene_name"], help="Type of identifier provided")
-    parser.add_argument("--gene_feature", default="CDS", help="Feature type to extract")
     parser.add_argument("--fasta", required=True, help="Path to the FASTA file")
 
     # Outputs
@@ -302,11 +298,6 @@ def extract_features_parser():
         choices=["gene_id", "gene_name"],
         help="Type of identifier provided ('gene_id' or 'gene_name')",
     )
-    parser.add_argument(
-        "--gene_feature",
-        default="CDS",
-        help="Feature type to extract (default = 'CDS')",
-    )
     return parser
 
 
@@ -322,7 +313,7 @@ def extract_mrna_parser():
     return parser
 
 
-def find_target_parser():
+def find_targets_parser():
     parser = argparse.ArgumentParser(
         description=(
             "Extracts probe sequences fulfilling the following criteria:\n"
@@ -450,7 +441,7 @@ def parse_iupac_mismatches(iupac_mismatches_str: str):
     return iupac_mismatches_str
 
 
-def parse_genes(genes_str: str):
+def parse_genes(genes_str: str) -> set[str]:
     logger.info(f"Parsing genes: {genes_str}")
     selected_genes = set([g.strip().lower() for g in genes_str.split(",")])
     return selected_genes

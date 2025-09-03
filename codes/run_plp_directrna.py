@@ -11,7 +11,6 @@ def main():
         args.features_output,
         args.genes,
         args.identifier_type,
-        args.gene_feature,
         args.fasta, 
         args.transcriptome_output,
         args.sequences_output,
