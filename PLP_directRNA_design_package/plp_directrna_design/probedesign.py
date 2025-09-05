@@ -61,30 +61,6 @@ ligation_junctions_dict = {'TA': 'preferred',
 
 # Functions
 
-## Evaluate IUPAC mismatches format:
-def parse_iupac_mismatches(mismatch_str):
-    """
-    Parses a string of mismatches formatted as "pos:base,pos:base" into a list of tuples.
-    
-    Args:
-        mismatch_str (str): Mismatch input string (e.g., "5:R,10:G")
-    
-    Returns:
-        list: A list of (position, base) tuples, e.g., [(5, 'R'), (10, 'G')].
-    """
-    mismatches = []
-    try:
-        for pair in mismatch_str.split(","):
-            pos, base = pair.split(":")
-            pos = int(pos.strip())  # Convert position to integer
-            base = base.strip().upper()  # Ensure base is uppercase
-            mismatches.append((pos, base))
-
-    except (ValueError, IndexError):
-        raise InputValueError("Invalid format for --iupac_mismatches. Use 'pos:base,pos:base', e.g., '5:R,10:G'.", 
-                              field="iupac_mismatches", code="invalid_mismatch_format")
-    
-    return mismatches
 ## Evaluate ligation junction functions:
 def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30):
     """
@@ -92,7 +68,7 @@ def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30):
 
     Args:
         targets (pd.DataFrame): DataFrame containing probe sequences in the 'Sequence' column.
-        iupac_mismatches (str or list of tuples): Mismatch instructions in the form "5:R,10:G" or [(5, 'R'), (10, 'G')].
+        iupac_mismatches (list of tuples): Mismatch instructions in the form [(5, 'R'), (10, 'G')].
         plp_length (int): Length of the probe (default: 30).
 
     Returns:
@@ -113,10 +89,6 @@ def evaluate_ligation_junction(targets, iupac_mismatches=None, plp_length=30):
         targets.loc[idx, 'Ligation junction'] = ligation_status
 
         if iupac_mismatches is not None:
-            # If mismatches are provided as a string, parse them into a list of (pos, symbol) tuples.
-            if isinstance(iupac_mismatches, str):
-                iupac_mismatches = parse_iupac_mismatches(iupac_mismatches)
-                
             # Limit to 2 mismatches
             if len(iupac_mismatches) > 2:
                 raise InputValueError("The number of mismatches should be less than or equal to 2",

@@ -1,5 +1,6 @@
+from typing import Tuple
 import argparse
-from . import probedesign as plp
+from . import probedesign as plp, InputValueError
 import pandas as pd
 from typing import Literal, Optional
 import logging
@@ -100,13 +101,13 @@ def find_targets(
 
 
 def extract_features(
-    gtf_file: str,
-    output_file: Optional[str] = None,
+    gtf: str,
+    output: Optional[str] = None,
     genes: Optional[set[str]] = None,
     identifier_type: Literal["gene_id", "gene_name"] = "gene_id",
 ):
     # Parse the GTF file and filter by gene list
-    gtf_df = plp.parse_gtf(gtf_file, genes, identifier_type)
+    gtf_df = plp.parse_gtf(gtf, genes, identifier_type)
 
     logger.info(
         f"🔹 Extracted {len(gtf_df)} features from GTF file."
@@ -115,11 +116,11 @@ def extract_features(
     # Merge regions and calculate coverage
     merged_cov_df = plp.merge_regions_and_coverage(genes, gtf_df)
 
-    if output_file is not None:
+    if output is not None:
         # Write the merged results to an output file
-        merged_cov_df.to_csv(output_file, sep="\t", index=False)
+        merged_cov_df.to_csv(output, sep="\t", index=False)
 
-        logger.info(f"Results saved to {output_file}")
+        logger.info(f"Results saved to {output}")
 
     return merged_cov_df
 
@@ -147,7 +148,7 @@ def extract_mrna(fasta_file: str, gtf_file: str, output_file: str):
 
 def extract_sequences(
     gtf_output: str,
-    fasta_file: str,
+    fasta: str,
     output_fasta: str,
     plp_length: int,
     identifier_type: Literal["gene_name", "gene_id"],
@@ -158,14 +159,14 @@ def extract_sequences(
 
     Args:
         gtf_output (str): Path to the GTF-derived DataFrame (TSV format).
-        fasta_file (str): Path to the indexed FASTA file.
+        fasta (str): Path to the indexed FASTA file.
         output_fasta (str): Path to the output FASTA file.
     """
     logger.info(f"🔹 Loading GTF output from {gtf_output}...")
     df = pd.read_csv(gtf_output, sep="\t")
 
     # Ensure FASTA index exists
-    plp.check_fasta_index(fasta_file)
+    plp.check_fasta_index(fasta)
 
     # Save regions for fast retrieval
     plp.save_regions_for_faidx(
@@ -173,7 +174,7 @@ def extract_sequences(
     )
 
     # Extract sequences
-    plp.extract_sequences(fasta_file, regions_file + ".txt", output_fasta, df)
+    plp.extract_sequences(fasta, regions_file + ".txt", output_fasta, df)
 
 
 def run_plp_directrna(
@@ -435,10 +436,35 @@ def extract_sequences_parser():
 
 
 # Input parsers
-def parse_iupac_mismatches(iupac_mismatches_str: str):
-    if iupac_mismatches_str == "None":
+def parse_iupac_mismatches(mismatch_str: str) -> list[Tuple[int, str]]:
+    """
+    Parses a string of mismatches formatted as "pos:base,pos:base" into a list of tuples.
+    
+    Args:
+        mismatch_str (str): Mismatch input string (e.g., "5:R,10:G")
+    
+    Returns:
+        list: A list of (position, base) tuples, e.g., [(5, 'R'), (10, 'G')].
+    """
+    if mismatch_str == "None":
         return None
-    return iupac_mismatches_str
+
+    mismatches = []
+    try:
+        for pair in mismatch_str.split(","):
+            pos, base = pair.split(":")
+            pos = int(pos.strip())  # Convert position to integer
+            base = base.strip().upper()  # Ensure base is uppercase
+            mismatches.append((pos, base))
+
+    except (ValueError, IndexError):
+        raise InputValueError(
+            "Invalid format for --iupac_mismatches. Use 'pos:base,pos:base', e.g., '5:R,10:G'.", 
+            field="iupac_mismatches",
+            code="invalid_mismatch_format"
+        )
+
+    return mismatches
 
 
 def parse_genes(genes_str: str) -> set[str]:
