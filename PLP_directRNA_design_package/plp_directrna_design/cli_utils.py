@@ -5,29 +5,30 @@ import pandas as pd
 from typing import Literal, Optional
 import logging
 
+
 logger = logging.getLogger(__name__)
 
 
 # Commands
 def find_targets(
-    selected_features,
-    sequences_output,
-    output_file,
-    reference_fasta,
-    min_coverage,
-    gc_min,
-    gc_max,
-    num_probes,
-    iupac_mismatches,
-    max_errors,
-    check_specificity,
-    plp_length,
-    Tm_min,
-    Tm_max,
-    lowest_percentile_Tm_score_cutoff,
-    min_dist_probes,
-    filter_ligation_junction,
-    off_target_output,
+    selected_features: str,
+    sequences_output: str,
+    output_file: str,
+    reference_fasta: str,
+    min_coverage: int,
+    gc_min: int,
+    gc_max: int,
+    num_probes: int,
+    iupac_mismatches: list[Tuple[int, str]],
+    max_errors: int,
+    check_specificity: bool,
+    plp_length: int,
+    Tm_min: int,
+    Tm_max: int,
+    lowest_percentile_Tm_score_cutoff: int,
+    min_dist_probes: int,
+    filter_ligation_junction: bool,
+    off_target_output: bool,
 ):
     """
     Main function for probe extraction.
@@ -191,7 +192,7 @@ def run_plp_directrna(
     gc_min: int,
     gc_max: int,
     num_probes: int,
-    iupac_mismatches: str,
+    iupac_mismatches: list[Tuple[int, str]],
     max_errors: int,
     check_specificity: bool,
     Tm_min: int,
@@ -267,7 +268,7 @@ def run_plp_directrna_parser():
     parser.add_argument("--gc_min", type=int, default=50, help="Minimum GC content percentage")
     parser.add_argument("--gc_max", type=int, default=65, help="Maximum GC content percentage")
     parser.add_argument("--num_probes", type=int, default=10, help="Number of probes to generate")
-    parser.add_argument("--iupac_mismatches", default=None, help="IUPAC mismatches parameter")
+    parser.add_argument("--iupac_mismatches", type=parse_iupac_mismatches, default=None, help="IUPAC mismatches parameter")
     parser.add_argument("--max_errors", type=int, default=1, help="Maximum number of errors allowed")
     parser.add_argument("--check_specificity", action="store_true", help="Enable specificity checking")
     parser.add_argument("--plp_length", type=int, default=30, help="PLP length for probe design")
@@ -439,10 +440,10 @@ def extract_sequences_parser():
 def parse_iupac_mismatches(mismatch_str: str) -> list[Tuple[int, str]]:
     """
     Parses a string of mismatches formatted as "pos:base,pos:base" into a list of tuples.
-    
+
     Args:
         mismatch_str (str): Mismatch input string (e.g., "5:R,10:G")
-    
+
     Returns:
         list: A list of (position, base) tuples, e.g., [(5, 'R'), (10, 'G')].
     """
@@ -459,7 +460,7 @@ def parse_iupac_mismatches(mismatch_str: str) -> list[Tuple[int, str]]:
 
     except (ValueError, IndexError):
         raise InputValueError(
-            "Invalid format for --iupac_mismatches. Use 'pos:base,pos:base', e.g., '5:R,10:G'.", 
+            "Invalid format for iupac mismatches. Use 'pos:base,pos:base', e.g., '5:R,10:G'.",
             field="iupac_mismatches",
             code="invalid_mismatch_format"
         )
