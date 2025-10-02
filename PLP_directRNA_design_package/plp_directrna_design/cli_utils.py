@@ -282,9 +282,9 @@ def run_plp_directrna_parser():
     parser.add_argument("--check_specificity", action="store_true", help="Enable specificity checking")
     parser.add_argument("--plp_length", type=int, default=30, help="PLP length for probe design")
     parser.add_argument("--off_target_output", action="store_true", help="Enable saving of off-target output")
-    parser.add_argument("--Tm_min", type=none_or_int, default=None, help="Minimum Tm for probes")
-    parser.add_argument("--Tm_max", type=none_or_int, default=None, help="Maximum Tm for probes")
-    parser.add_argument("--lowest_percentile_Tm_score_cutoff", type=none_or_int, default=None, help="Lowest percentile Tm score cutoff")
+    parser.add_argument("--Tm_min", type=none_or_int, help="Minimum Tm for probes")
+    parser.add_argument("--Tm_max", type=none_or_int, help="Maximum Tm for probes")
+    parser.add_argument("--lowest_percentile_Tm_score_cutoff", type=none_or_int, help="Lowest percentile Tm score cutoff")
     parser.add_argument("--min_dist_probes", type=int, default=100, help="Minimum distance between probes")
     parser.add_argument("--filter_ligation_junction", action="store_true", help="Enable filtering of ligation junctions")
 
