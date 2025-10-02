@@ -4,7 +4,7 @@ from . import probedesign as plp, InputValueError
 import pandas as pd
 from typing import Literal, Optional
 import logging
-
+from typing import Optional, Tuple, List
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +23,12 @@ def find_targets(
     max_errors: int,
     check_specificity: bool,
     plp_length: int,
-    Tm_min: int,
-    Tm_max: int,
-    lowest_percentile_Tm_score_cutoff: int,
     min_dist_probes: int,
     filter_ligation_junction: bool,
     off_target_output: bool,
+    Tm_min: Optional[int] = None,
+    Tm_max: Optional[int] = None,
+    lowest_percentile_Tm_score_cutoff: Optional[int] = None,
 ):
     """
     Main function for probe extraction.
@@ -76,18 +76,23 @@ def find_targets(
         )
 
     # Calculate the melting temperature scores
-    sequences = targets_df["Sequence"]
-    scores = [
-        plp.score_padlock_probe(seq, Tm_min=Tm_min, Tm_max=Tm_max) for seq in sequences
-    ]
-    targets_df["Melt_Tm_scores"] = scores
-    # Calculate the suggested cutoff based on the 5th percentile
-    suggested_cutoff = plp.analyze_scores(
-        scores, percentile=lowest_percentile_Tm_score_cutoff
-    )
-    # Filter the targets based on the suggested cutoff
-    targets_df = targets_df[targets_df["Melt_Tm_scores"] <= suggested_cutoff]
-    # Filteer the probes based on the minimum distance between probes
+    if Tm_min is None or Tm_max is None or lowest_percentile_Tm_score_cutoff is None:
+        suggested_cutoff = 0
+        scores = 'NA' 
+        targets_df["Melt_Tm_scores"] = scores
+    else:
+        sequences = targets_df["Sequence"]
+        scores = [
+            plp.score_padlock_probe(seq, Tm_min=Tm_min, Tm_max=Tm_max) for seq in sequences
+        ]
+        # Calculate the suggested cutoff based on the 5th percentile
+        suggested_cutoff = plp.analyze_scores(
+            scores, percentile=lowest_percentile_Tm_score_cutoff
+        )
+        # Filter the targets based on the suggested cutoff
+        targets_df["Melt_Tm_scores"] = scores
+        targets_df = targets_df[targets_df["Melt_Tm_scores"] <= suggested_cutoff]
+    # Filter the probes based on the minimum distance between probes
     targets_df = plp.filter_probes_by_distance(
         targets_df, min_dist_probes=min_dist_probes
     )
@@ -246,6 +251,10 @@ def run_plp_directrna(
     )
 
 
+
+def none_or_int(s):
+    return None if s in ("None", "none", "") else int(s)
+
 # Argument parsers
 
 def run_plp_directrna_parser():
@@ -273,9 +282,9 @@ def run_plp_directrna_parser():
     parser.add_argument("--check_specificity", action="store_true", help="Enable specificity checking")
     parser.add_argument("--plp_length", type=int, default=30, help="PLP length for probe design")
     parser.add_argument("--off_target_output", action="store_true", help="Enable saving of off-target output")
-    parser.add_argument("--Tm_min", type=int, default=50, help="Minimum Tm for probes")
-    parser.add_argument("--Tm_max", type=int, default=70, help="Maximum Tm for probes")
-    parser.add_argument("--lowest_percentile_Tm_score_cutoff", type=int, default=10, help="Lowest percentile Tm score cutoff")
+    parser.add_argument("--Tm_min", type=none_or_int, help="Minimum Tm for probes")
+    parser.add_argument("--Tm_max", type=none_or_int, help="Maximum Tm for probes")
+    parser.add_argument("--lowest_percentile_Tm_score_cutoff", type=none_or_int, help="Lowest percentile Tm score cutoff")
     parser.add_argument("--min_dist_probes", type=int, default=100, help="Minimum distance between probes")
     parser.add_argument("--filter_ligation_junction", action="store_true", help="Enable filtering of ligation junctions")
 
