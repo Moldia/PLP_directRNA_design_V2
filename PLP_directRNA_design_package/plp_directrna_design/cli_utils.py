@@ -55,9 +55,12 @@ def find_targets(
             off_target_output=True,
         )
         # Save the off-target information
-        off_target_info.to_csv(
-            output_file.replace(".tsv", "_off_target.tsv"), sep="\t", index=False
-        )
+        if off_target_info is not None:
+            off_target_info.to_csv(
+                f'{output_file}_off_target.csv', sep=",", index=False
+            )
+        else:
+            logger.warning("No off-target information to save (off_target_info is None).")
     else:
         targets_df, off_target_info = plp.find_targets(
             selected_features=selected_features,
