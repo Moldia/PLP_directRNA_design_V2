@@ -922,7 +922,7 @@ def find_targets(selected_features, sequences_output, reference_fasta, plp_lengt
 
     # Introduce IUPAC mismatches if specified and check ligation junctions. Or just check ligation junctions
     targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
-    off_target_info = None  # default when specificity is not checked
+    #off_target_info = None  # default when specificity is not checked
 
     # Check probe specificity against reference genome if requested
     if check_specificity:
@@ -932,7 +932,6 @@ def find_targets(selected_features, sequences_output, reference_fasta, plp_lengt
         valid_targets_df, off_target_info = filter_probes_by_specificity(targets_df, specificity_results,
                                                                         selected_features=selected_features,
                                                                         off_target_output_file=off_target_file)
-        
         # recheck the tandem repetition of the sequences
         pat = re.compile(r'(\w{2})\1{2,}')  # dinucleotide repeated at least twice more (≥3 total)
         mask = ~valid_targets_df['Sequence'].astype(str).apply(lambda s: bool(pat.search(s)))
@@ -997,7 +996,6 @@ def filter_probes_by_specificity(targets_df, specificity_results, selected_featu
 
     valid_probes = []
     off_target_details = []
-    off_target_df = None
 
     for probe_id in targets_df['Probe_id'].unique():
             # Assume probe_id format is "Gene|chr:start-end"
@@ -1010,7 +1008,7 @@ def filter_probes_by_specificity(targets_df, specificity_results, selected_featu
             # observed_transcripts = set(specificity_results.loc[specificity_results['query_name'] == probe_id, 'target_name'].unique())
             observed_regions = set(specificity_results.loc[specificity_results['query_name'] == probe_id, 'target_name'].unique())   
 
-            # print(f"gene {gene} , {probe_id}, extract_sequences: {extract_sequences}, expected regions: {expected_regions}, expected transcripts: {expected_transcripts}")
+            #print(f"gene {gene} , {probe_id}, extract_sequences: {extract_sequences}, expected regions: {expected_regions}, expected transcripts: {expected_transcripts}")
             # print(f"{specificity_results.loc[specificity_results['query_name'] == probe_id][['query_name', 'query_sequence', 'target_name']]} observed regions: {observed_regions}")
             # Check: if all observed transcripts are among expected transcripts for the gene, the probe is valid.
             if observed_regions.issubset(expected_regions):
@@ -1029,12 +1027,21 @@ def filter_probes_by_specificity(targets_df, specificity_results, selected_featu
     valid_targets_df = targets_df[targets_df['Probe_id'].isin(valid_probes)]
 
     # Optionally, save off-target details to a CSV file
-    if off_target_output_file and off_target_details:
+    if len(off_target_details) > 0 and off_target_output_file:
         off_target_df = pd.DataFrame(off_target_details)
         off_target_df.to_csv(off_target_output_file, index=False)
-        print(f"Off-target probe details saved to {off_target_output_file}")
+        print(f"✅ Off-target probe details saved to {off_target_output_file}")
     else:
-        off_target_df = None
+        off_target_details.append({
+                    'Probe_id': 'No-off-targets-detected',
+                    'Gene': 'No-off-targets-detected',
+                    'Sequence': 'No-off-targets-detected',
+                    'Expected_transcripts': 'No-off-targets-detected',
+                    'Observed_regions': 'No-off-targets-detected',
+                    'Off_targets': 'No-off-targets-detected'
+                })
+        off_target_df = pd.DataFrame(off_target_details)
+        print("✅ No off-target probes detected.")
 
     # Return the valid probes and the off-target details list (even if empty)
     return valid_targets_df, off_target_df
