@@ -106,7 +106,7 @@ def find_targets(
     targets_df = plp.select_top_probes(targets_df, num_probes)
     # Save the output
     targets_df.to_csv(output_file, sep="\t", index=False)
-    return targets_df
+    return targets_df, off_target_info
 
 
 def extract_features(
