@@ -922,7 +922,7 @@ def find_targets(selected_features, sequences_output, reference_fasta, plp_lengt
 
     # Introduce IUPAC mismatches if specified and check ligation junctions. Or just check ligation junctions
     targets_df = evaluate_ligation_junction(targets_df, iupac_mismatches=iupac_mismatches, plp_length=plp_length)
-    #off_target_info = None  # default when specificity is not checked
+    off_target_info = None  # default when specificity is not checked
 
     # Check probe specificity against reference genome if requested
     if check_specificity:
