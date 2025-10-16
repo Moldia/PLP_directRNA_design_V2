@@ -30,120 +30,66 @@ cutadapt --version
 ```
 
 # Running  
-## Extract features
-`python3 codes/extract_features.py --gtf data/tmp.gtf --genes Grik2 --identifier_type gene_name --gene_feature CDS --output extract_features_output.txt`
-
-## Extract transcriptome
-`python3 codes/extract_mrna.py --gtf data/tmp.gtf --fasta data/Mus.fa --output_file data/transcriptome_out.fa`  
-
-_This step can be parallelized together with `extract_features.py` and the output is required by last step `find_target.py`_  
-
-## Extract sequences
-`python3 codes/extract_sequences.py --fasta data/Mus.fa --output_fasta extract_seqs_output.fa --identifier_type gene_name --plp_length 30 --gtf_output extract_features_output.txt`
-
-## Find targets
-`python3 codes/find_target.py --selected_features extract_features_output.txt --fasta_file extract_seqs_output.fa --output_file targets.txt --iupac_mismatches "5:R,10:G" --reference_fasta data/transcriptome_out.fa --max_errors 4 --Tm_min 58 --Tm_max 62 --lowest_percentile_Tm_score_cutoff 5 --min_dist_probes 8 --check_specificity --filter_ligation_junction`
-
-
 ## Run whole workflow  
 ```
-python3 codes/run_probe_design.py \
---extract_features_gtf data/tmp.gtf \
---extract_features_genes Grik2 \
---extract_features_identifier_type gene_name \
---extract_features_gene_feature CDS \
---extract_features_output extract_features_output.txt \
---extract_transcriptome_gtf data/tmp.gtf \
---extract_transcriptome_fasta data/Mus.fa \
---extract_transcriptome_output_file data/transcriptome_out.fa \
---extract_sequences_fasta data/Mus.fa \
---extract_sequences_output_fasta extract_seqs_output.fa \
---extract_sequences_identifier_type gene_name \
---extract_sequences_plp_length 30 \
---extract_sequences_gtf_output extract_features_output.txt \
---find_target_selected_features extract_features_output.txt \
---find_target_fasta_file extract_seqs_output.fa \
---find_target_output_file targets.txt \
---find_target_iupac_mismatches 5:R,10:G \
---find_target_reference_fasta data/transcriptome_out.fa \
---find_target_max_errors 4 \
---find_target_Tm_min 58 \
---find_target_Tm_max 62 \
---find_target_lowest_percentile_Tm_score_cutoff 5 \
---find_target_min_dist_probes 8 \
---find_target_filter_ligation_junction \
---find_target_specificity_check \
---find_target_num_probes 15
+python3 codes/run_plp_directrna.py \
+    --gtf data/tmp.gtf \
+    --genes Grik2 \
+    --identifier_type gene_name \
+    --features_output features_output.txt \
+    --fasta data/Mus.fa \
+    --transcriptome_output data/transcriptome_out.fa \
+    --sequences_output extract_seqs_output.fa \
+    --targets_output targets.txt \
+    --min_coverage 1 \
+    --gc_min 50 \
+    --gc_max 65 \
+    --num_probes 10 \
+    --iupac_mismatches None \
+    --max_errors 1 \
+    --check_specificity \
+    --plp_length 30 \
+    --min_dist_probes 10 \
+    --filter_ligation_junction
 ```
 
 
 ```mermaid
-flowchart LR
-  %% Inputs (Top Layer)
-  gtf[gtf]
-  genes[genes]
-  identifier_type[identifier_type]
-  gene_feature[gene_feature]
-  fasta[fasta]
-  min_coverage[min_coverage]
-  gc_min[gc_min]
-  gc_max[gc_max]
-  num_probes[num_probes]
-  iupac_mismatches[iupac_mismatches]
-  max_errors[max_errors]
-  check_specificity[check_specificity]
-  plp_length[plp_length]
-  Tm_min[Tm_min]
-  Tm_max[Tm_max]
-  lowest_percentile_Tm_score_cutoff[lowest_percentile_Tm_score_cutoff]
-  min_dist_probes[min_dist_probes]
-  filter_ligation_junction[filter_ligation_junction]
+flowchart TD
+  A[run_plp_directrna.py] --> B[Parse CLI args]
+  B --> C[Extract features]
+  C --> COUT[[features_output.tsv]]
 
-  %% Script
-  features[extract_feature.py]
-  transcriptome[extract_mrna.py]
-  sequences[extract_sequences.py]
-  probes[find_target.py]
-  
-  %% Output
-  output1[extracted_features.txt]
-  output2[transcriptome_output.fa]
-  output3[extract_seqs_output.fa]
-  probes.txt[probes.txt]
+  B --> D[Extract mRNA]
+  D --> DOUT[[transcriptome_output.fa]]
 
-  %% Connections
-  gtf --> features
-  genes --> features
-  identifier_type --> features
-  gene_feature --> features
-  features --> output1
+  COUT --> E[Extract sequences]
+  B --> E
+  E --> EOUT[[sequences_output.fa]]
 
-  gtf --> transcriptome
-  fasta --> transcriptome
-  transcriptome --> output2
+  %% Find targets block
+  COUT --> F[Find targets]
+  EOUT --> F
+  F --> G[Filter by coverage and GC content]
+  G --> H[Evaluate ligation junctions]
+  H --> I{Tm scoring parameters provided?}
+  I -- No --> J[Skip Tm scoring]
+  I -- Yes --> K[Score probes by Tm & GC → apply cutoff]
+  J --> L[Filter by probe distance]
+  K --> L
+  L --> M{Filter non-preferred junctions?}
+  M -- Yes --> N[Drop non-preferred probes]
+  M -- No --> N2[Keep all probes]
+  N --> O{Check probe specificity?}
+  N2 --> O
+  O -- Yes --> P[Run Cutadapt search vs reference FASTA]
+  P --> Q[Filter valid probes / collect off-targets]
+  O -- No --> Q2[Skip specificity filtering]
+  Q --> R[Select top N probes per gene]
+  Q2 --> R
+  R --> TOUT[[targets_output.tsv]]
 
-  fasta --> sequences
-  identifier_type --> sequences
-  plp_length --> sequences
-  output1 --> sequences 
-  sequences --> output3
-
-  output1 --> probes
-  output2 --> probes
-  output3 --> probes
-  iupac_mismatches --> probes
-  fasta --> probes
-  max_errors--> probes
-  Tm_min--> probes
-  Tm_max--> probes
-  lowest_percentile_Tm_score_cutoff--> probes
-  min_dist_probes--> probes
-  filter_ligation_junction--> probes
-  min_coverage--> probes
-  gc_min--> probes
-  gc_max--> probes
-  num_probes--> probes
-  check_specificity--> probes
-  plp_length--> probes
-  probes --> probes.txt
+  %% Optional results
+  P -.-> S[[targets_specificity.csv]]
+  Q -.-> U[[targets_off_target.csv]]
 ```
